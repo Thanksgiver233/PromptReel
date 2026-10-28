@@ -1,0 +1,10 @@
+{
+  "name": "promptreel",
+  "version": "1.0.0",
+  "description": "Video prompt hub: one idea rewritten per AI video model's own syntax across 15 platforms, with storyboard scripts.",
+  "author": {
+    "name": "Thanksgiver233"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/Thanksgiver233/PromptReel"
+}

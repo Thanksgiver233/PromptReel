@@ -1,0 +1,199 @@
+{
+  "author": "Thanksgiver233",
+  "authorUrl": "https://github.com/Thanksgiver233",
+  "description": "Video prompt hub: one idea rewritten per AI video model's own syntax across 15 platforms, with storyboard scripts. Web, CLI, MCP server and Skill, zero dependencies, MIT licensed.",
+  "homepage": "https://github.com/Thanksgiver233/PromptReel",
+  "identifier": "thanksgiver233-promptreel",
+  "name": "promptreel",
+  "prompts": [],
+  "resources": [],
+  "tags": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "dsh",
+    "ai-video",
+    "prompt-engineering",
+    "kling",
+    "sora",
+    "veo",
+    "mcp"
+  ],
+  "tools": [
+    {
+      "name": "list_platforms",
+      "description": "列出所有已支持的视频生成模型（可灵、即梦、海螺、MiniMax H3、通义万相、混元、智谱清影、Vidu、PixVerse、Runway、Luma、Pika、Sora、Veo、Muse），含各平台的语言、时长档位、是否支持负向提示词/音频。写视频提示词前先用它选平台。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "generate_prompt",
+      "description": "为指定视频模型生成适配的提示词与分镜脚本。同一个创意在不同平台会被重排成该平台偏好的结构（如可灵的五段式、即梦的标签块、海螺的 [Push in] 括号运镜、H3 的 [Shot N] + soundscape、海外模型的英文关键词）。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "platform": {
+            "type": "string",
+            "description": "平台 id，如 kling / seedance / hailuo / minimax-h3 / wan / qingying / runway / sora / veo。先用 list_platforms 查看全部。"
+          },
+          "brief": {
+            "type": "string",
+            "description": "一句话创意 / 主题"
+          },
+          "subject": {
+            "type": "string",
+            "description": "画面主体：人物、产品、生物的外形、服装、材质"
+          },
+          "action": {
+            "type": "string",
+            "description": "动作与情节。用逗号分隔多个动作节点，会被自动拆成分镜。"
+          },
+          "scene": {
+            "type": "string",
+            "description": "场景环境：地点、时间、天气、背景元素"
+          },
+          "mood": {
+            "type": "string",
+            "description": "情绪基调，如「孤独而震撼」"
+          },
+          "style": {
+            "type": "string",
+            "description": "视觉风格，逗号分隔，最多 3 个。可选值见 list_lexicon。"
+          },
+          "light": {
+            "type": "string",
+            "description": "光影氛围，逗号分隔，最多 2 个"
+          },
+          "camera": {
+            "type": "string",
+            "description": "运镜偏好，逗号分隔，最多 2 个"
+          },
+          "ratio": {
+            "type": "string",
+            "description": "画幅，如 16:9 / 9:16 / 1:1"
+          },
+          "duration": {
+            "type": "number",
+            "description": "单条时长（秒），需在该平台档位内"
+          },
+          "shots": {
+            "type": "number",
+            "description": "分镜数量 1-8"
+          },
+          "audio": {
+            "type": "string",
+            "description": "音效 / 环境声 / 对白（仅支持音频的平台生效）"
+          },
+          "music": {
+            "type": "string",
+            "description": "配乐描述（仅 MiniMax H3 生效）"
+          },
+          "negative": {
+            "type": "string",
+            "description": "负向提示词。留空则用默认值；传空字符串可清空。"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "markdown",
+              "json"
+            ],
+            "description": "返回格式，默认 markdown"
+          }
+        },
+        "required": [
+          "platform"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "generate_all",
+      "description": "同一个创意，一次性生成全部平台（或指定几个平台）的适配版本，用于横向对比或一稿多投。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "platforms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "平台 id 列表；留空表示全部"
+          },
+          "brief": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "scene": {
+            "type": "string"
+          },
+          "mood": {
+            "type": "string"
+          },
+          "style": {
+            "type": "string"
+          },
+          "light": {
+            "type": "string"
+          },
+          "camera": {
+            "type": "string"
+          },
+          "ratio": {
+            "type": "string"
+          },
+          "duration": {
+            "type": "number"
+          },
+          "shots": {
+            "type": "number"
+          },
+          "audio": {
+            "type": "string"
+          },
+          "music": {
+            "type": "string"
+          },
+          "negative": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_platform_template",
+      "description": "查看某个平台的提示词模板原文、字段公式和使用要点。用于理解某个模型该怎么写，或据此改造出自己的模板。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "platform": {
+            "type": "string",
+            "description": "平台 id"
+          }
+        },
+        "required": [
+          "platform"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_lexicon",
+      "description": "列出可选的中英文风格 / 光影 / 运镜词表，以及默认负向提示词。用于挑选 style / light / camera 的合法取值。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    }
+  ],
+  "version": "1.0.0"
+}

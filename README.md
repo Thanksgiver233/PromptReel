@@ -101,6 +101,29 @@ node mcp/server.mjs     # stdio，由客户端拉起
 
 `skill/SKILL.md` 是给 agent 的完整方法论（选平台、写主体、拆分镜、交付时说明平台约束），配套 `references/` 里有变量表和自动生成的平台模板参考。
 
+### DeepSeek Harness (DSH)
+
+DSH 插件（`promptreel-dsh 0.1.0`，已实测 DSH 0.2.1-rc.2）：注册 `promptreel` Skill 与 5 个原生工具（`promptreel_list_platforms` / `generate_prompt` / `generate_all` / `get_platform_template` / `list_lexicon`），与 CLI、MCP 共用 `shared/engine.mjs`，不另起 MCP 服务、不联网。安装与说明见 [docs/dsh.md](docs/dsh.md)：
+
+```bash
+dsh plugin --profile web add github:Thanksgiver233/PromptReel
+```
+
+标签：`dsh-plugin`（`package.json` keywords 与仓库 GitHub topic，便于 DSH 插件索引发现）。
+
+### WorkBuddy / CodeBuddy 手动安装
+
+WorkBuddy 暂无公开的 Skill / MCP 上架入口，先用手动安装：
+
+```bash
+git clone https://github.com/Thanksgiver233/PromptReel.git
+cp -r PromptReel/skill ~/.codebuddy/skills/promptreel
+# 或 WorkBuddy 路径：
+cp -r PromptReel/skill ~/.workbuddy-ai/skills/promptreel
+```
+
+MCP 配置见 [mcp/README.md](mcp/README.md) 的 WorkBuddy 一节（写进 `~/.workbuddy-ai/mcp.json`）。
+
 ## 架构
 
 ```

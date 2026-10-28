@@ -1,0 +1,1 @@
+{"description":"Video prompt hub: one idea rewritten per AI video model's own syntax across 15 platforms, with storyboard scripts.","mcpServers":{"promptreel":{"args":["mcp/server.mjs"],"command":"node"}},"name":"promptreel","version":"1.0.0"}

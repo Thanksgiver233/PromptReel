@@ -1,0 +1,16 @@
+{
+  "name": "promptreel-marketplace",
+  "owner": {
+    "name": "Thanksgiver233"
+  },
+  "metadata": {
+    "description": "PromptReel plugin marketplace"
+  },
+  "plugins": [
+    {
+      "name": "promptreel",
+      "source": "./",
+      "description": "Video prompt hub: one idea rewritten per AI video model's own syntax across 15 platforms."
+    }
+  ]
+}

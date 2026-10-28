@@ -1,0 +1,13 @@
+# PromptReel DSH bundle patch
+#
+# Inserts exactly one plugin row: this package's Cordis plugin (lib/index.js).
+# It registers the `promptreel` agent skill on ctx.skills and five native
+# tools (promptreel_*) on ctx.tools, all backed by shared/engine.mjs.
+# No MCP bridge row: the native tools reuse the same engine the MCP server
+# uses, so there is no subprocess, no second copy of the templates, and no
+# path to resolve for a stdio MCP server inside the installed package.
+# No config: the plugin is stateless and needs no credentials.
+
+- insert:
+    - id: promptreel
+      name: 'promptreel-dsh'

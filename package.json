@@ -1,0 +1,57 @@
+{
+  "bugs": {
+    "url": "https://github.com/Thanksgiver233/PromptReel/issues"
+  },
+  "description": "PromptReel for DeepSeek Harness (DSH): one video idea rewritten for 15 AI video models, as native DSH tools plus the PromptReel agent skill. dsh-plugin.",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "skill",
+    "shared",
+    "mcp",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE",
+    "docs/dsh.md"
+  ],
+  "homepage": "https://github.com/Thanksgiver233/PromptReel",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "dsh",
+    "ai-video",
+    "prompt-engineering",
+    "kling",
+    "sora",
+    "veo",
+    "mcp"
+  ],
+  "license": "MIT",
+  "main": "lib/index.js",
+  "name": "promptreel-dsh",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.5",
+    "@deepseek-ai/dsh-skill": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Thanksgiver233/PromptReel.git"
+  },
+  "type": "module",
+  "version": "0.1.0"
+}
