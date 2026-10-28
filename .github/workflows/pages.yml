@@ -1,0 +1,67 @@
+# Deploy PromptReel (static, single-file index.html) to GitHub Pages.
+# Prepared locally only — NOT pushed, NOT enabled. See parent report for
+# the exact authorization steps still required (push + Settings > Pages).
+# Source: GitHub Docs, "Configuring a publishing source for your GitHub
+# Pages site" / "Using custom workflows with GitHub Pages" (checked 2026-10-28).
+name: Deploy PromptReel to GitHub Pages
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # Rebuild index.html from src/ so the deployed file can never be
+      # stale relative to src/theme.css, src/lexicon.js, src/platforms.js.
+      # build.mjs is zero-dependency and only uses Node built-ins.
+      - name: Rebuild index.html from src/
+        run: node scripts/build.mjs
+
+      # Stage ONLY the web files. Do not publish mcp/, skill/, scripts/,
+      # shared/ or .github/ as part of the site (the repo itself is public,
+      # but the site root should contain just index.html + assets/).
+      - name: Stage site files
+        run: |
+          set -euo pipefail
+          rm -rf dist
+          mkdir -p dist/assets
+          cp index.html dist/index.html
+          cp assets/*.jpg dist/assets/
+          touch dist/.nojekyll
+          test -s dist/index.html
+          test "$(ls dist/assets/*.jpg | wc -l)" = "8"
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
