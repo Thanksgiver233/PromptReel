@@ -1,0 +1,1880 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PromptReel · 视频提示词中枢</title>
+<script>
+/* 首屏前决定主题，避免闪色：优先用户选择，其次跟随系统 */
+(function(){
+  try{
+    var t = localStorage.getItem('promptreel.theme');
+    if(t !== 'light' && t !== 'dark'){
+      t = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+    document.documentElement.setAttribute('data-theme', t);
+  }catch(e){
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
+})();
+</script>
+<style>
+/* ============================================================
+   PromptReel · theme.css
+   设计语言：剪辑台 / 编辑部
+   规则：无渐变发光、无玻璃拟态、无彩色描边；
+        单色纸白 + 一条 REC 红；1px 细线分割；等宽字体承担数据
+   双主题：暗色=片场与剪辑台，亮色=海边外拍
+   ============================================================ */
+
+:root{
+  --bg:#0A0A0B;
+  --surface:#0E0E10;
+  --surface-2:#121214;
+  --raised:#17171A;
+  --fg:#EDEAE4;
+  --fg-2:#C9C5BD;
+  --muted:#8B8780;
+  --faint:#605D57;
+  --line:rgba(255,255,255,.075);
+  --line-2:rgba(255,255,255,.14);
+  --line-3:rgba(255,255,255,.24);
+  --tint-1:rgba(255,255,255,.022);
+  --tint-2:rgba(255,255,255,.045);
+  --tint-3:rgba(255,255,255,.07);
+  --body:#E2DFD9;
+  --neg:#C9827B;
+  --rec:#D8564E;
+  --mask:rgba(5,5,6,.72);
+  --mast-a:rgba(10,10,11,.15);
+  --mast-b:rgba(14,14,16,.55);
+  --mast-img-filter:grayscale(.5) contrast(1.1) brightness(1.02);
+  --ref-filter:grayscale(.35) contrast(1.04) brightness(1);
+  --grain-opacity:.022;
+  --grain-blend:normal;
+  --mono:"SF Mono","JetBrains Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+  --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  --serif:"Times New Roman",Georgia,"Songti SC",serif;
+  --r:8px;
+}
+
+/* 亮色：海边外拍 */
+[data-theme="light"]{
+  --bg:#F1F0EB;
+  --surface:#FFFFFF;
+  --surface-2:#FFFFFF;
+  --raised:#FFFFFF;
+  --fg:#15151A;
+  --fg-2:#3C3B39;
+  --muted:#6B6761;
+  --faint:#9B958C;
+  --line:rgba(20,20,25,.10);
+  --line-2:rgba(20,20,25,.17);
+  --line-3:rgba(20,20,25,.28);
+  --tint-1:rgba(20,20,25,.025);
+  --tint-2:rgba(20,20,25,.05);
+  --tint-3:rgba(20,20,25,.08);
+  --body:#24242A;
+  --neg:#B4564C;
+  --mask:rgba(30,30,35,.38);
+  --mast-a:rgba(255,255,255,0);
+  --mast-b:rgba(255,255,255,.42);
+  --mast-img-filter:saturate(1.02) contrast(1.02) brightness(1.02);
+  --ref-filter:saturate(1) contrast(1.02);
+  --grain-opacity:.03;
+  --grain-blend:multiply;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none !important}
+html,body{height:100%}
+body{
+  background:var(--bg);
+  color:var(--fg);
+  font-family:var(--sans);
+  font-size:13px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+  overflow:hidden;
+  transition:background-color .25s ease,color .25s ease;
+}
+::selection{background:var(--fg);color:var(--bg)}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--line-2);border:3px solid var(--bg);border-radius:9px}
+::-webkit-scrollbar-thumb:hover{background:var(--line-3)}
+
+/* 胶片颗粒：一层极淡的模拟噪点，压掉数字感的平滑 */
+.grain{
+  position:fixed;inset:0;z-index:70;pointer-events:none;
+  opacity:var(--grain-opacity);mix-blend-mode:var(--grain-blend);
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/></filter><rect width='160' height='160' filter='url(%23n)' opacity='.6'/></svg>");
+}
+
+.app{display:grid;grid-template-columns:234px 1fr;height:100vh}
+
+/* ============ 侧栏 ============ */
+.sidebar{
+  background:var(--surface);
+  border-right:1px solid var(--line);
+  display:flex;flex-direction:column;min-width:0;
+  transition:background-color .25s ease;
+}
+
+.masthead{position:relative;height:112px;flex:0 0 auto;overflow:hidden;border-bottom:1px solid var(--line)}
+.masthead img{
+  position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 42%;
+  filter:var(--mast-img-filter);opacity:.9;
+}
+.masthead .mast-light{display:none}
+[data-theme="light"] .mast-dark{display:none}
+[data-theme="light"] .mast-light{display:block}
+.masthead::after{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(180deg,var(--mast-a),var(--mast-b) 60%,var(--surface) 100%);
+}
+.masthead-txt{position:absolute;left:16px;bottom:13px;z-index:2}
+.wordmark{
+  font-family:var(--serif);font-size:15px;letter-spacing:.3em;color:var(--fg);
+  text-transform:uppercase;line-height:1;
+}
+.wm-sub{
+  font-size:9.5px;letter-spacing:.24em;color:var(--muted);margin-top:7px;
+  text-transform:uppercase;font-family:var(--mono);
+}
+
+.search{padding:12px 12px 8px}
+.search input{
+  width:100%;height:30px;background:transparent;border:1px solid var(--line);
+  border-radius:6px;padding:0 9px;color:var(--fg);font-size:12px;outline:none;
+  font-family:inherit;transition:border-color .16s,background .16s;
+}
+.search input:focus{border-color:var(--line-3);background:var(--tint-1)}
+.search input::placeholder{color:var(--faint);letter-spacing:.02em}
+
+.applist{flex:1;overflow-y:auto;padding:2px 8px 8px;display:flex;flex-direction:column;gap:1px}
+.appitem{
+  display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:6px;
+  cursor:pointer;position:relative;transition:background .14s;min-width:0;
+}
+.appitem:hover{background:var(--tint-2)}
+.appitem.on{background:var(--tint-3)}
+.appitem.on::before{
+  content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);
+  width:2px;height:14px;background:var(--fg);border-radius:1px;
+}
+.av{
+  width:24px;height:24px;border-radius:5px;flex:0 0 auto;display:grid;place-items:center;
+  font-family:var(--mono);font-size:8.5px;font-weight:600;letter-spacing:0;
+  background:var(--tint-1);
+  border:1px solid color-mix(in srgb, currentColor 42%, transparent);
+  color:var(--fg-2);
+}
+[data-theme="light"] .av{filter:saturate(1.15) brightness(.82)}
+.appitem .meta{min-width:0;flex:1}
+.appitem .nm{
+  font-size:12.5px;color:var(--fg-2);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;letter-spacing:.01em;
+}
+.appitem.on .nm{color:var(--fg);font-weight:500}
+.appitem .tg{display:none}
+.appitem .badge{
+  font-family:var(--mono);font-size:8px;letter-spacing:.1em;color:var(--faint);
+  border:1px solid var(--line);border-radius:3px;padding:0 3px;flex:0 0 auto;text-transform:uppercase;
+}
+
+.addapp{
+  margin:0 8px 8px;height:30px;border-radius:6px;border:1px dashed var(--line-2);
+  background:transparent;color:var(--muted);font-size:11.5px;cursor:pointer;
+  font-family:inherit;transition:.16s;letter-spacing:.02em;
+}
+.addapp:hover{border-color:var(--line-3);color:var(--fg);border-style:solid}
+
+.side-foot{
+  padding:9px 12px 12px;border-top:1px solid var(--line);
+  display:flex;flex-direction:column;gap:7px;
+}
+.ghostbtn{
+  background:transparent;border:1px solid var(--line);color:var(--muted);
+  border-radius:6px;height:27px;font-size:11px;cursor:pointer;font-family:inherit;
+  transition:.16s;letter-spacing:.02em;
+}
+.ghostbtn:hover{border-color:var(--line-2);color:var(--fg)}
+.storage-note{
+  font-family:var(--mono);font-size:8.5px;color:var(--faint);text-align:center;
+  letter-spacing:.08em;text-transform:uppercase;
+}
+
+/* 主题切换 */
+.themeswitch{
+  display:grid;grid-template-columns:1fr 1fr;gap:2px;padding:2px;
+  border:1px solid var(--line);border-radius:6px;
+}
+.themeswitch button{
+  height:24px;border:none;background:transparent;color:var(--muted);
+  font-size:10.5px;cursor:pointer;border-radius:4px;font-family:inherit;
+  display:flex;align-items:center;justify-content:center;gap:5px;
+  transition:background .16s,color .16s;letter-spacing:.04em;
+}
+.themeswitch button:hover{color:var(--fg)}
+.themeswitch button.on{background:var(--fg);color:var(--bg)}
+.themeswitch svg{width:11px;height:11px;display:block}
+
+/* ============ 主区 ============ */
+main{display:flex;flex-direction:column;min-width:0;overflow:hidden}
+
+.topbar{
+  padding:12px 20px 11px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  flex:0 0 auto;
+}
+.cur{display:flex;align-items:center;gap:10px;min-width:0}
+.cur .av{width:30px;height:30px;border-radius:6px;font-size:9.5px}
+.cur h2{
+  font-size:14.5px;font-weight:600;letter-spacing:.01em;display:flex;align-items:baseline;gap:8px;
+}
+.cur .org{
+  font-family:var(--mono);font-size:8.5px;font-weight:400;color:var(--faint);
+  letter-spacing:.12em;text-transform:uppercase;
+}
+.cur p{font-size:10.5px;color:var(--muted);margin-top:2px;letter-spacing:.01em}
+.caps{display:flex;gap:0;flex-wrap:wrap;margin-left:auto;align-items:center}
+.cap{
+  font-family:var(--mono);font-size:9px;color:var(--faint);letter-spacing:.1em;
+  text-transform:uppercase;padding:0 10px;border-left:1px solid var(--line);white-space:nowrap;
+}
+.cap:first-child{border-left:none;padding-left:0}
+.cap.hl{color:var(--fg-2)}
+.topacts{display:flex;gap:6px;padding-left:14px;border-left:1px solid var(--line)}
+
+/* 刻度尺：剪辑台的时间线隐喻 */
+.ruler{
+  height:11px;flex:0 0 auto;border-bottom:1px solid var(--line);
+  background-image:
+    repeating-linear-gradient(90deg,var(--line-2) 0 1px,transparent 1px 8px),
+    repeating-linear-gradient(90deg,var(--line-3) 0 1px,transparent 1px 64px);
+  background-size:auto 4px,auto 8px;
+  background-position:0 100%,0 100%;
+  background-repeat:repeat-x;
+  opacity:.55;
+}
+
+.workspace{flex:1;display:grid;grid-template-columns:minmax(330px,.84fr) 1.16fr;overflow:hidden}
+.panel{overflow-y:auto;padding:16px 18px 40px;min-width:0}
+.form-panel{
+  border-right:1px solid var(--line);display:flex;flex-direction:column;
+  overflow:hidden;padding:0;background:var(--bg);
+}
+.form-scroll{flex:1;overflow-y:auto;padding:15px 18px 4px;min-height:0}
+.form-foot{padding:11px 18px 14px;border-top:1px solid var(--line);flex:0 0 auto;background:var(--bg)}
+.out-panel{padding-top:0;background:var(--bg)}
+
+/* ============ 表单 ============ */
+.formula{
+  font-size:10px;color:var(--faint);line-height:1.75;padding:8px 10px;border-radius:6px;
+  border:1px solid var(--line);margin-bottom:14px;overflow:hidden;
+  font-family:var(--mono);letter-spacing:.04em;
+}
+.formula b{color:var(--fg-2);font-weight:500;letter-spacing:.1em}
+.formula .fork{
+  float:right;font-size:9px;color:var(--muted);background:transparent;
+  border:1px solid var(--line);border-radius:4px;padding:1px 6px;cursor:pointer;
+  font-family:inherit;transition:.15s;margin-left:8px;letter-spacing:.06em;
+}
+.formula .fork:hover{border-color:var(--line-3);color:var(--fg)}
+
+.sec{margin-bottom:13px}
+.sec-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.sec-h label,.sec-h .lb{
+  font-size:9.5px;color:var(--faint);font-weight:500;letter-spacing:.16em;text-transform:uppercase;
+}
+.sec-h .mini{
+  font-size:9.5px;color:var(--faint);cursor:pointer;background:none;border:none;
+  font-family:var(--mono);transition:.15s;letter-spacing:.06em;
+}
+.sec-h .mini:hover{color:var(--fg-2)}
+
+input[type=text],input[type=number],textarea,select{
+  width:100%;background:var(--surface);border:1px solid var(--line);
+  border-radius:6px;padding:8px 10px;color:var(--fg);font-size:12.5px;outline:none;
+  font-family:inherit;transition:border-color .16s,background .16s;resize:vertical;line-height:1.7;
+}
+input[type=text]:focus,textarea:focus,select:focus{border-color:var(--line-3)}
+input[type=color]{
+  width:100%;height:34px;background:transparent;border:1px solid var(--line);
+  border-radius:6px;padding:3px;cursor:pointer;display:block;
+}
+::placeholder{color:var(--faint);font-size:12px}
+textarea{min-height:52px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{
+  height:25px;display:inline-flex;align-items:center;padding:0 9px;border-radius:5px;cursor:pointer;
+  border:1px solid var(--line);color:var(--muted);font-size:11.5px;background:transparent;
+  transition:.14s;user-select:none;letter-spacing:.01em;
+}
+.chip:hover{border-color:var(--line-2);color:var(--fg-2)}
+.chip.on{background:var(--fg);border-color:var(--fg);color:var(--bg);font-weight:500}
+
+.seg{display:flex;gap:4px;flex-wrap:wrap}
+.seg button{
+  flex:1;min-width:48px;height:26px;border-radius:5px;font-size:11.5px;cursor:pointer;
+  background:transparent;border:1px solid var(--line);color:var(--muted);
+  font-family:inherit;transition:.14s;white-space:nowrap;
+}
+.seg button:hover{border-color:var(--line-2);color:var(--fg-2)}
+.seg button.on{background:var(--fg);border-color:var(--fg);color:var(--bg);font-weight:500}
+.param{display:grid;grid-template-columns:34px 1fr;gap:9px;align-items:center;margin-bottom:6px}
+.param > span{font-family:var(--mono);font-size:9px;color:var(--faint);letter-spacing:.1em;text-transform:uppercase}
+.param .seg button{min-width:0;height:24px;font-size:11px}
+.param .slider .val{min-width:40px;font-size:11px}
+
+.slider{display:flex;align-items:center;gap:10px}
+.slider input[type=range]{
+  flex:1;-webkit-appearance:none;height:2px;border-radius:0;background:var(--line-2);outline:none;
+}
+.slider input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:11px;height:11px;border-radius:50%;cursor:pointer;
+  background:var(--fg);border:none;
+}
+.slider .val{
+  font-family:var(--mono);font-size:10px;color:var(--fg-2);letter-spacing:.06em;
+  min-width:52px;text-align:right;
+}
+
+.genbtn{
+  width:100%;height:40px;border-radius:6px;border:1px solid var(--fg);cursor:pointer;
+  font-family:inherit;font-size:12.5px;font-weight:600;color:var(--bg);letter-spacing:.1em;
+  background:var(--fg);transition:.16s;
+}
+.genbtn:hover{filter:brightness(1.1)}
+.genbtn:active{transform:translateY(1px)}
+.kbd{font-family:var(--mono);font-size:9px;opacity:.45;font-weight:400;margin-left:8px;letter-spacing:.06em}
+
+/* ============ 输出 ============ */
+.out-tools{
+  position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:8px;
+  padding:12px 0 0;background:var(--bg);
+}
+.tabs{display:flex;gap:0;align-items:stretch;height:32px}
+.tabs button{
+  padding:0 13px;border:none;background:transparent;color:var(--faint);
+  font-size:11.5px;cursor:pointer;font-family:inherit;transition:.15s;
+  border-bottom:1px solid transparent;letter-spacing:.02em;
+}
+.tabs button:hover{color:var(--fg-2)}
+.tabs button.on{color:var(--fg);border-bottom-color:var(--fg)}
+.out-tools .sp{flex:1}
+.iconbtn{
+  display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 11px;border-radius:5px;
+  font-size:11px;background:transparent;border:1px solid var(--line);color:var(--muted);
+  cursor:pointer;font-family:inherit;transition:.15s;white-space:nowrap;letter-spacing:.02em;
+}
+.iconbtn:hover{border-color:var(--line-3);color:var(--fg)}
+.iconbtn.primary{background:var(--fg);border-color:var(--fg);color:var(--bg);font-weight:500}
+.iconbtn.primary:hover{filter:brightness(1.1)}
+
+.card{
+  background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r);
+  padding:15px 16px;margin-bottom:10px;position:relative;
+  transition:background-color .25s ease;
+}
+.card.crop::before,.card.crop::after{
+  content:'';position:absolute;width:9px;height:9px;border:1px solid var(--line-2);
+}
+.card.crop::before{top:7px;left:7px;border-right:none;border-bottom:none}
+.card.crop::after{bottom:7px;right:7px;border-left:none;border-top:none}
+.card-h{display:flex;align-items:center;gap:9px;margin-bottom:10px}
+.card-h .t{
+  font-family:var(--mono);font-size:9px;font-weight:500;color:var(--muted);
+  letter-spacing:.16em;text-transform:uppercase;
+}
+.card-h .tag{
+  font-family:var(--mono);font-size:8.5px;color:var(--faint);letter-spacing:.08em;
+  border-left:1px solid var(--line);padding-left:9px;
+}
+.card-h .sp{flex:1}
+.copy{
+  font-family:var(--mono);font-size:9px;color:var(--faint);background:transparent;
+  border:1px solid var(--line);border-radius:4px;padding:2px 7px;cursor:pointer;
+  transition:.15s;letter-spacing:.08em;text-transform:uppercase;
+}
+.copy:hover{color:var(--fg);border-color:var(--line-3)}
+
+.prompt{
+  font-family:var(--mono);font-size:12.2px;line-height:1.95;color:var(--body);
+  white-space:pre-wrap;word-break:break-word;letter-spacing:.005em;
+}
+.negtxt{color:var(--neg)}
+
+.metarow{
+  display:flex;gap:0;flex-wrap:wrap;margin-top:11px;padding-top:10px;
+  border-top:1px solid var(--line);
+}
+.metarow span{
+  font-family:var(--mono);font-size:9px;color:var(--faint);letter-spacing:.08em;
+  padding:0 9px;border-left:1px solid var(--line);text-transform:uppercase;
+}
+.metarow span:first-child{padding-left:0;border-left:none}
+
+/* 参考画面 */
+.refs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.ref{
+  position:relative;border:1px solid var(--line);border-radius:6px;overflow:hidden;
+  background:var(--raised);
+}
+.ref img{
+  display:block;width:100%;aspect-ratio:16/10;object-fit:cover;
+  filter:var(--ref-filter);opacity:.92;
+  transition:filter .35s,opacity .35s,transform .5s;
+}
+.ref .ref-light{display:none}
+[data-theme="light"] .ref .ref-dark{display:none}
+[data-theme="light"] .ref .ref-light{display:block}
+.ref:hover img{filter:none;opacity:1;transform:scale(1.03)}
+.ref i{
+  position:absolute;left:7px;bottom:6px;font-style:normal;font-family:var(--mono);
+  font-size:8.5px;letter-spacing:.14em;color:#F2EFE9;text-transform:uppercase;
+  text-shadow:0 1px 6px rgba(0,0,0,.9);z-index:2;
+}
+.ref::after{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(180deg,transparent 55%,rgba(0,0,0,.45));
+}
+
+.shot{
+  border:1px solid var(--line);border-radius:6px;margin-bottom:6px;overflow:hidden;
+  background:var(--surface-2);transition:border-color .15s;border-left:2px solid transparent;
+}
+.shot:hover{border-color:var(--line-2)}
+.shot.open{border-left-color:var(--fg-2)}
+.shot-h{display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer}
+.shot-n{
+  width:20px;height:20px;display:grid;place-items:center;flex:0 0 auto;
+  font-family:var(--mono);font-size:9.5px;color:var(--fg-2);border:1px solid var(--line-2);
+  border-radius:4px;
+}
+.shot.open .shot-n{background:var(--fg);border-color:var(--fg);color:var(--bg)}
+.shot-h .info{flex:1;min-width:0}
+.shot-h .info b{
+  font-size:12px;font-weight:500;display:block;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;color:var(--fg-2);
+}
+.shot-h .info i{
+  font-family:var(--mono);font-size:9px;color:var(--faint);font-style:normal;letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.shot-b{padding:0 12px 12px;display:none}
+.shot.open .shot-b{display:block}
+.shot-b .prompt{font-size:11.8px;padding-top:10px;border-top:1px solid var(--line);color:var(--body)}
+.arrow{font-size:8px;color:var(--faint);transition:.2s}
+.shot.open .arrow{transform:rotate(180deg)}
+
+.tips{list-style:none;display:flex;flex-direction:column;gap:7px}
+.tips li{font-size:11.5px;color:var(--muted);padding-left:14px;position:relative;line-height:1.7}
+.tips li::before{
+  content:'';position:absolute;left:0;top:9px;width:5px;height:1px;background:var(--line-3);
+}
+
+.empty{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:70%;gap:12px;color:var(--faint);text-align:center;padding:40px;
+}
+.empty p{font-size:12px;max-width:280px;line-height:1.8}
+
+/* ============ 抽屉 ============ */
+.mask{
+  position:fixed;inset:0;background:var(--mask);z-index:80;
+  opacity:0;pointer-events:none;transition:.2s;
+}
+.mask.on{opacity:1;pointer-events:auto}
+.drawer{
+  position:fixed;top:0;right:0;height:100%;width:372px;max-width:92vw;z-index:81;
+  background:var(--surface);border-left:1px solid var(--line-2);
+  transform:translateX(100%);transition:transform .24s cubic-bezier(.4,0,.2,1);
+  display:flex;flex-direction:column;
+}
+.drawer.on{transform:translateX(0)}
+.drawer-h{
+  padding:16px 18px;border-bottom:1px solid var(--line);display:flex;
+  align-items:center;justify-content:space-between;
+}
+.drawer-h h3{
+  font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--fg-2);
+}
+.drawer-h .x{background:none;border:none;color:var(--faint);font-size:18px;cursor:pointer;line-height:1}
+.drawer-h .x:hover{color:var(--fg)}
+.drawer-b{flex:1;overflow-y:auto;padding:12px 14px}
+
+.saved{
+  border:1px solid var(--line);border-radius:6px;padding:11px 12px;margin-bottom:7px;
+  background:var(--bg);transition:border-color .15s;
+}
+.saved:hover{border-color:var(--line-2)}
+.saved .sh{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.saved .sh b{font-size:12px;font-weight:500;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.saved .sh .plat{
+  font-family:var(--mono);font-size:8px;color:var(--faint);letter-spacing:.1em;
+  border:1px solid var(--line);padding:1px 5px;border-radius:3px;text-transform:uppercase;
+}
+.saved .sd{
+  font-size:10.5px;color:var(--faint);line-height:1.6;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+}
+.saved .sa{display:flex;gap:6px;margin-top:9px}
+.saved .sa button{
+  font-family:var(--mono);font-size:9px;letter-spacing:.06em;padding:3px 9px;border-radius:4px;
+  cursor:pointer;background:transparent;border:1px solid var(--line);color:var(--muted);transition:.15s;
+  text-transform:uppercase;
+}
+.saved .sa button:hover{border-color:var(--line-3);color:var(--fg)}
+
+/* ============ 弹窗 ============ */
+.modal{
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-46%) scale(.985);z-index:82;
+  width:508px;max-width:94vw;max-height:88vh;overflow-y:auto;
+  background:var(--surface);border:1px solid var(--line-2);border-radius:10px;
+  padding:22px 24px;opacity:0;pointer-events:none;transition:.2s;
+  box-shadow:0 24px 60px rgba(0,0,0,.28);
+}
+.modal.on{opacity:1;pointer-events:auto;transform:translate(-50%,-50%) scale(1)}
+.modal h3{font-size:14px;font-weight:600;margin-bottom:5px;letter-spacing:.01em}
+.modal .sub{font-size:11px;color:var(--faint);margin-bottom:18px;line-height:1.7}
+.modal label{display:block;font-size:9.5px;color:var(--faint);margin-bottom:11px;letter-spacing:.12em;text-transform:uppercase}
+.modal label input,.modal label textarea,.modal label select{margin-top:6px;font-weight:400;letter-spacing:0;text-transform:none}
+.modal .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.modal .row3{display:flex;gap:18px;margin-bottom:13px;flex-wrap:wrap}
+.modal .chk{
+  display:flex;align-items:center;gap:6px;font-size:11px;margin:0;cursor:pointer;
+  color:var(--muted);letter-spacing:0;text-transform:none;
+}
+.modal .chk input{width:13px;height:13px;accent-color:var(--fg);cursor:pointer;margin:0}
+.tokens{
+  font-family:var(--mono);font-size:9.5px;color:var(--faint);background:var(--bg);
+  border:1px solid var(--line);border-radius:5px;padding:8px 10px;margin-bottom:14px;
+  line-height:1.9;word-break:break-all;
+}
+.tokens b{color:var(--fg-2);letter-spacing:.1em}
+.modal-foot{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
+.modal-foot button{
+  height:31px;padding:0 16px;border-radius:5px;font-size:11.5px;cursor:pointer;
+  font-family:inherit;background:transparent;border:1px solid var(--line-2);color:var(--muted);
+  transition:.15s;letter-spacing:.02em;
+}
+.modal-foot button:hover{border-color:var(--line-3);color:var(--fg)}
+.modal-foot button.primary{background:var(--fg);border-color:var(--fg);color:var(--bg);font-weight:500}
+.modal-foot button.primary:hover{filter:brightness(1.1)}
+
+.toast{
+  position:fixed;bottom:24px;left:50%;transform:translate(-50%,10px);z-index:99;
+  background:var(--raised);border:1px solid var(--line-2);color:var(--fg);
+  padding:8px 16px;border-radius:5px;font-family:var(--mono);font-size:10.5px;
+  letter-spacing:.08em;opacity:0;pointer-events:none;transition:.2s;
+  box-shadow:0 10px 30px rgba(0,0,0,.18);
+}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+
+/* ============ 响应式 ============ */
+@media (max-width:1180px){
+  .workspace{grid-template-columns:1fr;overflow-y:auto}
+  .form-panel{border-right:none;border-bottom:1px solid var(--line);display:block;overflow:visible}
+  .form-scroll{overflow:visible}
+  .form-foot{background:var(--bg);position:sticky;bottom:0;border-top:1px solid var(--line)}
+  .panel{overflow:visible}
+  .out-panel{padding-top:0}
+}
+@media (max-width:860px){
+  .app{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  .sidebar{border-right:none;border-bottom:1px solid var(--line)}
+  .masthead{height:74px}
+  .applist{flex-direction:row;overflow-x:auto;padding-bottom:8px}
+  .appitem{flex:0 0 auto}
+  .appitem .meta{display:none}
+  .appitem.on::before{display:none}
+  .side-foot,.storage-note{display:none}
+  .caps{display:none}
+  .search{padding:8px 12px}
+}
+
+</style>
+</head>
+<body>
+<div class="grain"></div>
+<div class="app">
+  <aside class="sidebar">
+    <div class="masthead">
+      <img class="mast-dark" src="assets/shot-camera.jpg" alt="">
+      <img class="mast-light" src="assets/beach-mast.jpg" alt="">
+      <div class="masthead-txt">
+        <div class="wordmark">Prompt&nbsp;Reel</div>
+        <div class="wm-sub">视频提示词中枢</div>
+      </div>
+    </div>
+    <div class="search"><input id="appSearch" type="text" placeholder="搜索应用 / 模型…"></div>
+    <div class="applist" id="appList"></div>
+    <button class="addapp" id="addAppBtn">＋ 添加我的应用</button>
+    <div class="side-foot">
+      <div class="themeswitch" id="themeSwitch">
+        <button data-theme="light" title="亮色模式">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.4 5.4l1.6 1.6M17 17l1.6 1.6M18.6 5.4L17 7M7 17l-1.6 1.6"/></svg>
+          亮
+        </button>
+        <button data-theme="dark" title="暗色模式">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.6A8.6 8.6 0 1 1 9.4 3.5a6.9 6.9 0 0 0 11.1 11.1z"/></svg>
+          暗
+        </button>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="ghostbtn" id="exportBtn" style="flex:1">导出备份</button>
+        <button class="ghostbtn" id="importBtn" style="flex:1">导入</button>
+      </div>
+      <div class="storage-note">数据保存在本机浏览器 · 不上传</div>
+    </div>
+    <input type="file" id="importFile" accept=".json" hidden>
+  </aside>
+
+  <main>
+    <div class="topbar">
+      <div class="cur">
+        <div class="av" id="curAv">KL</div>
+        <div>
+          <h2><span id="curName">可灵 AI</span><span class="org" id="curOrg">快手</span></h2>
+          <p id="curTag">写实向文生视频，五段式描述最稳</p>
+        </div>
+      </div>
+      <div class="caps" id="curCaps"></div>
+      <div class="topacts">
+        <button class="iconbtn" id="editAppBtn" hidden>编辑</button>
+        <button class="iconbtn" id="libBtn">模板库</button>
+      </div>
+    </div>
+    <div class="ruler"></div>
+
+    <div class="workspace">
+      <!-- 输入 -->
+      <section class="panel form-panel">
+        <div class="form-scroll">
+        <div class="formula" id="formulaBox"></div>
+
+        <div class="sec">
+          <div class="sec-h">
+            <span class="lb">一句话创意</span>
+            <button class="mini" id="sampleBtn">填充示例</button>
+          </div>
+          <textarea id="fBrief" rows="2" placeholder="例：雨夜霓虹街头，女黑客抬头看见全息鲸鱼游过楼宇之间"></textarea>
+        </div>
+
+        <div class="sec">
+          <div class="sec-h"><span class="lb">画面主体 / 场景环境</span></div>
+          <div class="grid2">
+            <input type="text" id="fSubject" placeholder="人物外形、服装、材质">
+            <input type="text" id="fScene" placeholder="地点、时间、天气、背景">
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-h"><span class="lb">动作与情节</span></div>
+          <textarea id="fAction" rows="3" placeholder="用逗号分隔多个动作节点，分镜会自动拆解成镜"></textarea>
+        </div>
+
+        <div class="sec">
+          <div class="sec-h"><span class="lb">视觉风格</span><span class="mini" id="styleCount">最多选 3 个</span></div>
+          <div class="chips" id="styleChips"></div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-h"><span class="lb">光影氛围</span></div>
+          <div class="chips" id="lightChips"></div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-h"><span class="lb">运镜偏好</span></div>
+          <div class="chips" id="camChips"></div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-h"><span class="lb">情绪基调</span></div>
+          <input type="text" id="fMood" placeholder="例：孤独而震撼 / 温暖治愈 / 紧张压迫">
+        </div>
+
+        <div class="sec">
+          <div class="sec-h"><span class="lb">输出参数</span></div>
+          <div class="param"><span>画幅</span><div class="seg" id="ratioSeg"></div></div>
+          <div class="param"><span>时长</span><div class="seg" id="durSeg"></div></div>
+          <div class="param"><span>分镜</span>
+            <div class="slider">
+              <input type="range" id="fShots" min="1" max="8" value="4">
+              <span class="val" id="shotsVal">4 镜</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="sec" id="audioSec" hidden>
+          <div class="sec-h"><span class="lb">音效 / 对白</span></div>
+          <input type="text" id="fAudio" placeholder="环境音、拟音、人声对白">
+          <div style="height:8px" id="musicRow" hidden></div>
+          <input type="text" id="fMusic" placeholder="配乐（BGM）：风格、乐器、节奏" hidden>
+        </div>
+
+        <div class="sec" id="negSec">
+          <div class="sec-h"><span class="lb">负向提示词</span><button class="mini" id="negReset">恢复默认</button></div>
+          <textarea id="fNeg" rows="2"></textarea>
+        </div>
+
+        </div>
+        <div class="form-foot">
+          <button class="genbtn" id="genBtn">生成提示词<span class="kbd">Ctrl ↵</span></button>
+        </div>
+      </section>
+
+      <!-- 输出 -->
+      <section class="panel out-panel">
+        <div class="out-tools">
+          <div class="tabs" id="tabs">
+            <button data-tab="overall" class="on">整体提示词</button>
+            <button data-tab="shots">分镜脚本</button>
+            <button data-tab="json">结构化</button>
+          </div>
+          <div class="sp"></div>
+          <button class="iconbtn" id="copyAllBtn">复制全部</button>
+          <button class="iconbtn" id="downloadBtn">下载</button>
+          <button class="iconbtn primary" id="saveBtn">存入模板库</button>
+        </div>
+        <div id="outArea"></div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div class="mask" id="mask"></div>
+
+<div class="drawer" id="drawer">
+  <div class="drawer-h">
+    <h3>我的模板库</h3>
+    <button class="x" id="drawerClose">×</button>
+  </div>
+  <div class="drawer-b" id="drawerBody"></div>
+</div>
+
+<div class="modal" id="appModal">
+  <h3 id="modalTitle">添加我的应用</h3>
+  <div class="sub">自定义一个平台或内部模型，给它一套专属提示词结构。保存后会出现在左侧列表。</div>
+  <div class="row2">
+    <label>应用名称<input type="text" id="mName" placeholder="例：内部模型 V2"></label>
+    <label>头像文字（1-3 字）<input type="text" id="mShort" maxlength="3" placeholder="AB"></label>
+  </div>
+  <div class="row2">
+    <label>主题色<input type="color" id="mColor" value="#8B7BE8" ></label>
+    <label>时长选项（秒）<input type="text" id="mDur" value="5,10" placeholder="5,10"></label>
+  </div>
+  <label>一句话说明<input type="text" id="mTag" placeholder="这个平台擅长什么 / 提示词该怎么写"></label>
+  <label>提示词模板<textarea id="mTpl" rows="5" placeholder="{{subject}}，{{action}}。场景：{{scene}}。镜头：{{shotSize}}，{{camera}}。"></textarea></label>
+  <div class="tokens">
+    <b>可用变量：</b>{{subject}} {{action}} {{scene}} {{style}} {{light}} {{camera}} {{cameraBracket}} {{shotSize}} {{ratio}} {{duration}} {{mood}} {{topic}} {{negative}} {{audio}} {{shotIndex}} {{totalShots}}
+  </div>
+  <div class="row2">
+    <label>画幅选项<input type="text" id="mRatio" value="16:9,9:16,1:1" placeholder="16:9,9:16"></label>
+    <label>输出语言
+      <select id="mLang">
+        <option value="zh">中文描述</option>
+        <option value="en">英文描述（关键词用英文）</option>
+      </select>
+    </label>
+  </div>
+  <div class="row3">
+    <label class="chk"><input type="checkbox" id="mNeg" checked> 支持负向提示词</label>
+    <label class="chk"><input type="checkbox" id="mAudio"> 支持音频/对白</label>
+    <label class="chk"><input type="checkbox" id="mBracket"> 运镜用括号指令</label>
+  </div>
+  <label>使用技巧（每行一条，可留空）<textarea id="mTips" rows="3" placeholder="主体描述越具体越稳定&#10;避免一个镜头塞多个动作"></textarea></label>
+  <div class="modal-foot">
+    <button id="modalCancel">取消</button>
+    <button class="primary" id="modalSave">保存</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   PromptReel · 视频提示词中枢
+   单文件应用，数据存 localStorage
+   ============================================================ */
+
+const LS_KEY = 'promptreel.v1';
+
+/* LEXICON:START —— 由 src/lexicon.js 注入，改内容请改源文件后运行 node scripts/build.mjs */
+/* ============================================================
+   lexicon.js — 词库（单一数据源，由 build.mjs 注入 index.html）
+   中文用于国内模型，英文用于海外模型
+   ============================================================ */
+
+const STYLES = [
+  {zh:'电影级写实', en:'cinematic realism'},
+  {zh:'3D 动画', en:'3D animation, stylized render'},
+  {zh:'日系动漫', en:'anime style, cel shading'},
+  {zh:'赛博朋克', en:'cyberpunk, neon lit'},
+  {zh:'水墨国风', en:'Chinese ink wash painting'},
+  {zh:'胶片质感', en:'35mm film, grain'},
+  {zh:'广告大片', en:'high-end commercial look'},
+  {zh:'定格动画', en:'stop motion'},
+  {zh:'超现实', en:'surreal dreamlike'},
+  {zh:'复古 80s', en:'retro 1980s VHS'},
+  {zh:'蒸汽波', en:'vaporwave aesthetic'},
+  {zh:'黑白默片', en:'black and white silent film'}
+];
+
+const LIGHTS = [
+  {zh:'体积光', en:'volumetric light rays'},
+  {zh:'柔光', en:'soft diffused light'},
+  {zh:'霓虹侧光', en:'neon rim light'},
+  {zh:'黄金时刻', en:'golden hour glow'},
+  {zh:'低调暗光', en:'low-key lighting'},
+  {zh:'硬光高反差', en:'hard light, high contrast'},
+  {zh:'自然日光', en:'natural daylight'},
+  {zh:'雨夜反光', en:'rainy night reflections'},
+  {zh:'霓虹赛博光', en:'cyan and magenta neon'},
+  {zh:'烛火暖光', en:'warm candlelight'}
+];
+
+const CAMERAS = [
+  {zh:'固定机位', en:'static shot', bracket:'[Static shot]'},
+  {zh:'缓慢推近', en:'slow push in', bracket:'[Push in]'},
+  {zh:'拉远', en:'pull out', bracket:'[Pull out]'},
+  {zh:'横移', en:'lateral truck', bracket:'[Truck right]'},
+  {zh:'环绕主体', en:'arc shot around subject', bracket:'[Arc shot]'},
+  {zh:'跟拍', en:'tracking shot', bracket:'[Tracking shot]'},
+  {zh:'手持晃动', en:'handheld camera', bracket:'[Handheld]'},
+  {zh:'升降', en:'crane up', bracket:'[Pedestal up]'},
+  {zh:'快速变焦', en:'crash zoom', bracket:'[Zoom in]'}
+];
+
+const SHOT_EN = {
+  '远景':'wide shot','全景':'full shot','中景':'medium shot','中近景':'medium close-up',
+  '近景':'close shot','特写':'close-up','大特写':'extreme close-up'
+};
+
+/* LEXICON:END */
+
+/* ---------- 平台 ---------- */
+/* PLATFORMS:START —— 由 src/platforms.js 注入，改内容请改源文件后运行 node scripts/build.mjs */
+/* ============================================================
+   platforms.js — 平台档案（单一数据源，由 build.mjs 注入 index.html）
+   每个平台 = 一套提示词结构 + 能力位 + 词表参数
+   ============================================================ */
+
+const PLATFORMS = [
+  {
+    id:'kling', name:'可灵 AI', short:'KL', color:'#8B7BE8', color2:'#4A3FA0', org:'快手',
+    tagline:'3.0 系列原生 4K，五段式描述最稳',
+    caps:['负向提示词','运镜控制','首尾帧','原生 4K'],
+    lang:'zh', negative:true, audio:false, bracket:false,
+    durations:[5,10], ratios:['16:9','9:16','1:1','4:3'],
+    formula:['主体','动作','场景','镜头','光影','风格'],
+    template:'{{subject}}，{{action}}。环境：{{scene}}。镜头：{{shotSize}}，{{camera}}。光影：{{light}}。画面风格：{{style}}。画幅 {{ratio}}，时长 {{duration}}。',
+    tips:[
+      '主体 + 动作 + 场景 + 镜头 + 光影 五段式最稳，别把多个动作塞进一条',
+      '运动幅度大时降低描述密度，否则画面容易糊',
+      '先用首帧图锁构图，再用文字描述运动，稳定性最高'
+    ]
+  },
+  {
+    id:'seedance', name:'即梦 Seedance', short:'SD', color:'#4A7BC8', color2:'#1E3F73', org:'字节跳动',
+    tagline:'2.0 结构化分镜，多镜头叙事能力强',
+    caps:['负向提示词','多镜头','首尾帧','2.0'],
+    lang:'zh', negative:true, audio:false, bracket:false,
+    durations:[5,10], ratios:['16:9','9:16','4:3','1:1','21:9'],
+    formula:['画面主体','动作','场景','镜头语言','风格质感'],
+    template:'【画面主体】{{subject}}\n【动作】{{action}}\n【场景】{{scene}}\n【镜头语言】{{shotSize}}，{{camera}}\n【光影与风格】{{light}}，{{style}}\n【参数】画幅 {{ratio}}，时长 {{duration}}',
+    tips:[
+      '分镜模式下每条只描述一个连续动作，跨镜头交给剪辑',
+      '标签式换行写，比长句更容易被模型完整理解',
+      '风格词放最后，避免污染主体描述'
+    ]
+  },
+  {
+    id:'hailuo', name:'海螺 Hailuo', short:'HL', color:'#C4694F', color2:'#7A3A26', org:'MiniMax',
+    tagline:'02 系列运动表现强，括号运镜指令',
+    caps:['括号运镜','负向提示词','6s / 10s'],
+    lang:'zh', negative:true, audio:false, bracket:true,
+    durations:[6,10], ratios:['16:9','9:16','1:1'],
+    formula:['运镜指令','主体','动作','场景','光影','风格'],
+    template:'{{cameraBracket}} {{subject}}，{{action}}。场景：{{scene}}。{{light}}，{{style}}，{{shotSize}}，画幅 {{ratio}}，时长 {{duration}}。',
+    tips:[
+      '运镜指令写在提示词最前面，用 [ ] 包住，模型识别率最高',
+      '一次只给一个运镜指令，叠加会互相打架',
+      '写清楚运动方向与速度，比写「有电影感」有用得多'
+    ]
+  },
+  {
+    id:'minimax-h3', name:'MiniMax H3', short:'H3', color:'#6E9B85', color2:'#33564A', org:'MiniMax',
+    tagline:'全模态参考生成，2K / 最长 15 秒',
+    caps:['[Shot] 分镜','音景 + 配乐','2K','最长 15s'],
+    lang:'en', negative:false, audio:true, music:true, bracket:false,
+    durations:[5,10,15], ratios:['16:9','9:16','4:3','1:1','21:9'],
+    formula:['风格声明','[Shot N] 描述','音景','配乐'],
+    template:'This is a live-action, photographic shot, {{style}}.\n[Shot {{shotIndex}}] {{shotSize}}, {{camera}}, {{subject}} {{action}}. {{scene}}, {{light}}.\noverall_soundscape: {{audio}}\nnon_diegetic_music: {{music}}',
+    tips:[
+      '官方示例全部用英文撰写，主体与动作建议直接用英文填写',
+      '分镜用 [Shot 1] 方括号编号，切点可写时间码 At 00:04.500',
+      '音景与配乐分两行写，H3 会把环境声与非叙事配乐分开处理',
+      '参考素材用 <Picture 1> <Subject 1> 引用，图 ≤9 / 视频 ≤3 / 音频 ≤3'
+    ]
+  },
+  {
+    id:'muse', name:'Muse', short:'MU', color:'#9A6FB0', color2:'#5B3A6B', org:'美学叙事',
+    tagline:'氛围与色彩情绪优先，适合概念片',
+    caps:['情绪基调','色彩氛围','长镜头'],
+    lang:'zh', negative:true, audio:false, bracket:false,
+    durations:[5,10], ratios:['16:9','9:16','2.39:1'],
+    formula:['主题','主体','动作','场景','氛围','镜头','情绪'],
+    template:'{{topic}}\n主体：{{subject}}\n动作：{{action}}\n场景：{{scene}}\n氛围：{{light}}，{{style}}\n镜头：{{shotSize}}，{{camera}}\n情绪基调：{{mood}}\n画幅 {{ratio}}，时长 {{duration}}',
+    tips:[
+      '先写情绪与色彩关系，再写具体动作，画面更有统一调性',
+      '用「像什么」的比喻描述质感，比堆形容词有效',
+      '情绪基调词会显著影响调色倾向，别和风格词冲突'
+    ]
+  },
+  {
+    id:'wan', name:'通义万相 Wan', short:'WX', color:'#5C7FA8', color2:'#2C4A6B', org:'阿里云',
+    tagline:'2.2 中文语义与细节还原好',
+    caps:['负向提示词','中文友好','Wan 2.2'],
+    lang:'zh', negative:true, audio:false, bracket:false,
+    durations:[5], ratios:['16:9','9:16','1:1','4:3'],
+    formula:['主体','动作','场景','光影','风格','画质'],
+    template:'{{subject}}，{{action}}，{{scene}}，{{light}}，{{style}}，{{shotSize}}，{{camera}}，高清细节，画面稳定，画幅 {{ratio}}，时长 {{duration}}。',
+    tips:[
+      '画质词（高清细节、画面稳定）放句尾，能明显减少崩坏',
+      '主体数量控制在 2 个以内，多了容易粘连',
+      '中文自然语句即可，不需要翻译成英文'
+    ]
+  },
+  {
+    id:'hunyuan', name:'混元视频', short:'HY', color:'#4E8FA8', color2:'#1F4C5C', org:'腾讯',
+    tagline:'物理运动真实，适合产品与实拍质感',
+    caps:['负向提示词','物理真实','5s / 10s'],
+    lang:'zh', negative:true, audio:false, bracket:false,
+    durations:[5,10], ratios:['16:9','9:16','1:1'],
+    formula:['主体','动作','场景','镜头','画质'],
+    template:'{{subject}}，{{action}}。{{scene}}，{{shotSize}}，{{camera}}，{{light}}，{{style}}，画面清晰稳定，无变形，画幅 {{ratio}}，时长 {{duration}}。',
+    tips:[
+      '强调「物理真实、无变形」能减少手指与物体穿模',
+      '产品类镜头写清材质与反光，比写「高级感」有用',
+      '避免快速甩镜，模型对高速运动仍不稳定'
+    ]
+  },
+  {
+    id:'qingying', name:'智谱清影', short:'QY', color:'#7A8FA6', color2:'#3D4E5E', org:'智谱 AI',
+    tagline:'CogVideoX 底座，4K 60 帧 + AI 音效',
+    caps:['负向提示词','4K 60fps','AI 音效'],
+    lang:'zh', negative:true, audio:true, bracket:false,
+    durations:[6,10], ratios:['16:9','9:16','1:1'],
+    formula:['主体','动作','场景','镜头','光影','音效'],
+    template:'{{subject}}，{{action}}。场景：{{scene}}。镜头：{{shotSize}}，{{camera}}。光影：{{light}}，{{style}}。音效：{{audio}}。画幅 {{ratio}}，时长 {{duration}}。',
+    tips:[
+      '默认 6 秒一条，长叙事建议拆成分镜逐条生成',
+      '4K 60 帧适合产品与运动镜头，生成耗时更长',
+      '音效描述单独成句，和画面描述分开写识别更准'
+    ]
+  },
+  {
+    id:'vidu', name:'Vidu', short:'VD', color:'#C08A4A', color2:'#6E4A1C', org:'生数科技',
+    tagline:'参考图一致性强，动漫与角色向友好',
+    caps:['参考生视频','角色一致','负向提示词'],
+    lang:'zh', negative:true, audio:false, bracket:false,
+    durations:[4,8], ratios:['16:9','9:16','1:1'],
+    formula:['主体','动作','场景','镜头','质感'],
+    template:'{{subject}}，{{action}}。场景：{{scene}}。镜头：{{shotSize}}，{{camera}}。{{light}}，{{style}}，电影质感。画幅 {{ratio}}，时长 {{duration}}。',
+    tips:[
+      '角色类先上传参考图，提示词只写「变化的部分」',
+      '镜头语言越简单，角色一致性越好',
+      '动漫风格记得同步写画风词，否则会往写实偏'
+    ]
+  },
+  {
+    id:'pixverse', name:'PixVerse', short:'PX', color:'#4FA396', color2:'#1F5A52', org:'爱诗科技',
+    tagline:'模板化玩法多，特效镜头出片快',
+    caps:['特效模板','负向提示词','5s / 8s'],
+    lang:'zh', negative:true, audio:false, bracket:false,
+    durations:[5,8], ratios:['16:9','9:16','1:1'],
+    formula:['主体','动作','场景','镜头','特效'],
+    template:'{{subject}}，{{action}}。场景：{{scene}}。{{shotSize}}，{{camera}}，{{light}}，{{style}}，视觉冲击力强。画幅 {{ratio}}，时长 {{duration}}。',
+    tips:[
+      '特效类模板要把「效果发生的那一刻」写清楚',
+      '主体 + 一个明确动作，出片率远高于复杂剧情',
+      '同一提示词换模板多跑几次，比改词更快找到感觉'
+    ]
+  },
+  {
+    id:'runway', name:'Runway Gen-4.5', short:'RW', color:'#5E9E86', color2:'#2A5346', org:'Runway',
+    tagline:'英文自然语言，电影镜头语言最细',
+    caps:['英文提示词','运镜控制','5s / 10s'],
+    lang:'en', negative:false, audio:false, bracket:false,
+    durations:[5,10], ratios:['16:9','9:16','1:1','21:9'],
+    formula:['Subject','Action','Scene','Shot','Light','Style'],
+    template:'{{subject}} — {{action}} — {{scene}}. {{shotSize}}, {{camera}}, {{light}}, {{style}}. Shot on 35mm, natural motion, {{ratio}}.',
+    tips:[
+      '海外模型对英文更敏感，主体与动作建议直接用英文填写',
+      '一句话一个镜头，不要写多段剧情',
+      'Camera 与 lens 术语（dolly、crane、35mm）识别度高'
+    ]
+  },
+  {
+    id:'luma', name:'Luma Dream Machine', short:'LU', color:'#B8657F', color2:'#66303F', org:'Luma',
+    tagline:'自然流畅运动，一句话出片',
+    caps:['英文提示词','首尾帧','5s / 9s'],
+    lang:'en', negative:false, audio:false, bracket:false,
+    durations:[5,9], ratios:['16:9','9:16','1:1','21:9'],
+    formula:['Subject','Action','Scene','Camera','Style'],
+    template:'{{subject}} — {{action}}, {{scene}}. {{shotSize}}, {{camera}}, {{light}}, {{style}}, cinematic, smooth motion, {{ratio}}.',
+    tips:[
+      '短句 + 具体动词效果最好，长句会被截断理解',
+      '加 smooth motion / fluid movement 能减少抖动',
+      '人物特写建议写清面部表情与视线方向'
+    ]
+  },
+  {
+    id:'pika', name:'Pika', short:'PK', color:'#B06B9E', color2:'#5E3452', org:'Pika Labs',
+    tagline:'轻量创意向，特效与变形玩法多',
+    caps:['英文提示词','负向提示词','特效'],
+    lang:'en', negative:true, audio:false, bracket:false,
+    durations:[5,10], ratios:['16:9','9:16','1:1'],
+    formula:['Subject','Action','Scene','Camera','Style'],
+    template:'{{subject}} — {{action}} — {{scene}}, {{shotSize}}, {{camera}}, {{light}}, {{style}}, {{ratio}}.',
+    tips:[
+      '用破折号分隔「画面」和「风格」，可读性更好',
+      '特效词（morph、explode、freeze）放动作后面',
+      '负向提示词里加上 blurry、distorted 能提升成片率'
+    ]
+  },
+  {
+    id:'sora', name:'Sora 2', short:'SR', color:'#8A8A8F', color2:'#3E3E44', org:'OpenAI',
+    tagline:'长镜头 + 原生音频，适合叙事短片',
+    caps:['英文提示词','原生音频','对白'],
+    lang:'en', negative:false, audio:true, bracket:false,
+    durations:[4,8,12], ratios:['16:9','9:16','1:1'],
+    formula:['Subject','Action','Scene','Camera','Light','Style','Audio'],
+    template:'{{subject}} — {{action}} — {{scene}}. {{shotSize}}, {{camera}}, {{light}}, {{style}}. Audio: {{audio}}. {{duration}}, {{ratio}}.',
+    tips:[
+      'Sora 会自己补剧情，提示词写「起点和终点」比写过程更准',
+      '需要声音时务必显式写 Audio，否则可能静音',
+      '一条提示词只保留一个时间连续的场景'
+    ]
+  },
+  {
+    id:'veo', name:'Veo 3.1', short:'V3', color:'#5C7FC0', color2:'#28406B', org:'Google',
+    tagline:'音画同步生成，物理与材质表现优秀',
+    caps:['英文提示词','原生音频','8s'],
+    lang:'en', negative:false, audio:true, bracket:false,
+    durations:[8], ratios:['16:9','9:16'],
+    formula:['Subject','Action','Scene','Shot','Light','Style','Audio'],
+    template:'{{subject}} — {{action}}, {{scene}}. {{shotSize}}, {{camera}}, {{light}}, {{style}}. Audio: {{audio}}. {{ratio}}, {{duration}}.',
+    tips:[
+      '音效写具体（footsteps on wet concrete）比写 ambient sound 好',
+      '有对白时用引号包住台词，并注明说话人',
+      '避免在同一镜头内切场景，Veo 会强行衔接导致变形'
+    ]
+  }
+];
+
+/* PLATFORMS:END */
+
+/* ---------- 默认表单 ---------- */
+const DEFAULT_NEG = '画面模糊，人物变形，多余手指，肢体扭曲，文字水印，logo，低分辨率，噪点，闪烁，跳帧，比例失调';
+const SAMPLE = {
+  brief:'雨夜霓虹街头，一位女黑客穿过人群，抬头看见全息鲸鱼游过楼宇之间',
+  subject:'一位穿黑色长风衣的年轻女黑客，短发被雨水打湿，右耳戴着发光的银色耳机',
+  action:'她从人群中快步穿过，忽然停下脚步抬头仰望，雨水顺着脸颊滑落，瞳孔里映出蓝紫色光斑，风衣下摆被风掀起',
+  scene:'午夜赛博都市街道，两侧霓虹招牌与全息广告牌，地面积水倒映灯光，远处高架桥上悬浮车流',
+  mood:'孤独而震撼',
+  styles:['赛博朋克','电影级写实'],
+  lights:['霓虹侧光','雨夜反光'],
+  cameras:['缓慢推近','环绕主体'],
+  ratio:'16:9', duration:5, shots:4,
+  negative:DEFAULT_NEG,
+  audio:'雨声、远处车流与低频合成器音效，无人声对白',
+  music:'缓慢推进的合成器 Pad，低频脉冲，克制不煽情'
+};
+
+/* ---------- 状态 ---------- */
+const state = {
+  apps: PLATFORMS.map(p => ({...p, builtin:true})),
+  currentId: 'kling',
+  tab: 'overall',
+  saved: [],
+  form: {...SAMPLE, styles:[...SAMPLE.styles], lights:[...SAMPLE.lights], cameras:[...SAMPLE.cameras]},
+  result: null
+};
+
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* 品牌色只做细描边与文字色，不做填充渐变 */
+function paintAv(el, app){
+  el.style.color = app.color;   /* 底色与描边由 CSS 基于 currentColor 生成 */
+}
+
+/* ---------- 主题 ---------- */
+const THEME_KEY = 'promptreel.theme';
+function systemTheme(){
+  try{ return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; }
+  catch(e){ return 'dark'; }
+}
+function currentTheme(){
+  const t = document.documentElement.getAttribute('data-theme');
+  return (t === 'light' || t === 'dark') ? t : systemTheme();
+}
+function applyTheme(t){
+  document.documentElement.setAttribute('data-theme', t);
+  $$('#themeSwitch button').forEach(b => b.classList.toggle('on', b.dataset.theme === t));
+  try{ localStorage.setItem(THEME_KEY, t); }catch(e){}
+}
+
+/* ---------- 持久化 ---------- */
+function saveStore(){
+  try{
+    const custom = state.apps.filter(a => !a.builtin);
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      custom, saved: state.saved, currentId: state.currentId, form: state.form
+    }));
+  }catch(e){ /* 隐私模式下忽略 */ }
+}
+function loadStore(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(!raw) return;
+    const d = JSON.parse(raw);
+    if(Array.isArray(d.custom)) state.apps = state.apps.concat(d.custom);
+    if(Array.isArray(d.saved)) state.saved = d.saved;
+    if(d.form && typeof d.form === 'object') state.form = {...state.form, ...d.form};
+    if(d.currentId && state.apps.some(a => a.id === d.currentId)) state.currentId = d.currentId;
+  }catch(e){}
+}
+
+const current = () => state.apps.find(a => a.id === state.currentId) || state.apps[0];
+
+/* ---------- Toast ---------- */
+let toastTimer;
+function toast(msg){
+  const el = $('#toast');
+  el.textContent = msg;
+  el.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('on'), 1900);
+}
+
+/* ---------- 侧边栏 ---------- */
+function renderSidebar(){
+  const q = ($('#appSearch').value || '').trim().toLowerCase();
+  const list = state.apps.filter(a =>
+    !q || a.name.toLowerCase().includes(q) || (a.org||'').toLowerCase().includes(q) || (a.tagline||'').toLowerCase().includes(q)
+  );
+  const box = $('#appList');
+  if(!list.length){
+    box.innerHTML = '<div style="padding:18px 10px;font-size:11.5px;color:#5A6376;text-align:center">没有匹配的应用</div>';
+    return;
+  }
+  box.innerHTML = list.map(a => `
+    <div class="appitem ${a.id === state.currentId ? 'on' : ''}" data-id="${esc(a.id)}" title="${esc(a.name + ' · ' + (a.tagline||''))}">
+      <div class="av" style="color:${a.color}">${esc(a.short)}</div>
+      <div class="meta">
+        <div class="nm">${esc(a.name)}</div>
+        <div class="tg">${esc(a.tagline||'')}</div>
+      </div>
+      ${a.builtin ? '' : '<span class="badge">own</span>'}
+    </div>`).join('');
+  box.querySelectorAll('.appitem').forEach(el => {
+    el.onclick = () => { switchApp(el.dataset.id); };
+  });
+}
+
+/* ---------- 顶栏 ---------- */
+function renderTop(){
+  const a = current();
+  $('#curAv').textContent = a.short;
+  paintAv($('#curAv'), a);
+  $('#curName').textContent = a.name;
+  $('#curOrg').textContent = a.org || '自定义';
+  $('#curTag').textContent = a.tagline || '';
+  const caps = [...(a.caps || [])];
+  caps.unshift((a.durations||[5]).join('s / ') + 's');
+  $('#curCaps').innerHTML = caps.map((c,i) =>
+    `<span class="cap ${i===0?'hl':''}">${esc(c)}</span>`).join('');
+  $('#editAppBtn').hidden = !!a.builtin;
+  $('#musicRow').hidden = !a.music;
+  $('#fMusic').hidden = !a.music;
+  $('#formulaBox').innerHTML = `<button class="fork" id="forkBtn">以此模板新建</button><b>提示词公式</b>　${(a.formula||[]).map(esc).join(' <span style="opacity:.4">→</span> ')}`;
+  const fork = $('#forkBtn');
+  if(fork) fork.onclick = cloneToCustom;
+  $('#audioSec').hidden = !a.audio;
+  $('#negSec').hidden = !a.negative;
+}
+
+/* ---------- 表单渲染 ---------- */
+function chipHTML(arr, selected, cls){
+  return arr.map(o => {
+    const on = selected.includes(o.zh);
+    return `<div class="chip ${on?'on':''} ${on&&cls?cls:''}" data-v="${esc(o.zh)}">${esc(o.zh)}</div>`;
+  }).join('');
+}
+function renderChips(){
+  $('#styleChips').innerHTML = chipHTML(STYLES, state.form.styles, 'g2');
+  $('#lightChips').innerHTML = chipHTML(LIGHTS, state.form.lights, 'g2');
+  $('#camChips').innerHTML = chipHTML(CAMERAS, state.form.cameras, 'g2');
+  bindChips('#styleChips','styles',3);
+  bindChips('#lightChips','lights',2);
+  bindChips('#camChips','cameras',2);
+}
+function bindChips(sel, key, max){
+  $(sel).querySelectorAll('.chip').forEach(el => {
+    el.onclick = () => {
+      const v = el.dataset.v;
+      const arr = state.form[key];
+      const i = arr.indexOf(v);
+      if(i >= 0) arr.splice(i,1);
+      else{
+        if(arr.length >= max){ arr.shift(); }
+        arr.push(v);
+      }
+      renderChips();
+    };
+  });
+}
+function renderSegs(){
+  const a = current();
+  const ratios = a.ratios || ['16:9','9:16','1:1'];
+  if(!ratios.includes(state.form.ratio)) state.form.ratio = ratios[0];
+  $('#ratioSeg').innerHTML = ratios.map(r =>
+    `<button class="${r===state.form.ratio?'on':''}" data-v="${esc(r)}">${esc(r)}</button>`).join('');
+  $('#ratioSeg').querySelectorAll('button').forEach(b => b.onclick = () => {
+    state.form.ratio = b.dataset.v; renderSegs(); generate();
+  });
+
+  const durs = a.durations || [5];
+  if(!durs.includes(state.form.duration)) state.form.duration = durs[0];
+  $('#durSeg').innerHTML = durs.map(d =>
+    `<button class="${d===state.form.duration?'on':''}" data-v="${d}">${d}s</button>`).join('');
+  $('#durSeg').querySelectorAll('button').forEach(b => b.onclick = () => {
+    state.form.duration = +b.dataset.v; renderSegs(); generate();
+  });
+}
+function syncForm(){
+  $('#fBrief').value = state.form.brief || '';
+  $('#fSubject').value = state.form.subject || '';
+  $('#fAction').value = state.form.action || '';
+  $('#fScene').value = state.form.scene || '';
+  $('#fMood').value = state.form.mood || '';
+  $('#fAudio').value = state.form.audio || '';
+  $('#fMusic').value = state.form.music || '';
+  $('#fNeg').value = state.form.negative || '';
+  $('#fShots').value = state.form.shots || 4;
+  $('#shotsVal').textContent = (state.form.shots || 4) + ' 镜';
+  renderChips(); renderSegs();
+}
+function bindForm(){
+  const map = {fBrief:'brief', fSubject:'subject', fAction:'action', fScene:'scene', fMood:'mood', fAudio:'audio', fMusic:'music', fNeg:'negative'};
+  Object.entries(map).forEach(([id,key]) => {
+    $('#'+id).addEventListener('input', e => { state.form[key] = e.target.value; saveStore(); });
+  });
+  $('#fShots').addEventListener('input', e => {
+    state.form.shots = +e.target.value;
+    $('#shotsVal').textContent = state.form.shots + ' 镜';
+    saveStore(); generate();
+  });
+  $('#sampleBtn').onclick = () => {
+    state.form = {...SAMPLE, styles:[...SAMPLE.styles], lights:[...SAMPLE.lights], cameras:[...SAMPLE.cameras]};
+    syncForm(); saveStore(); generate(); toast('已填入示例创意');
+  };
+  $('#negReset').onclick = () => { state.form.negative = DEFAULT_NEG; $('#fNeg').value = DEFAULT_NEG; generate(); };
+  $('#genBtn').onclick = () => generate(true);
+}
+
+/* ---------- 提示词组装 ---------- */
+function tidy(s){
+  return String(s)
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/([\u4e00-\u9fa5])[,]([\u4e00-\u9fa5])/g, '$1，$2')
+    .replace(/【([^】]{0,12})】\s*[:：]?\s*(?=[\n【]|$)/g, '')
+    .replace(/[^\s，。；;、:：]{1,12}[:：]\s*(?=[。；;.\n]|$)/g, '')
+    .replace(/(?:—[ \t]*)+/g, '— ')
+    .replace(/—[ \t]*(?=[.,;:，。；])/g, '')
+    .replace(/([.,;:])[ \t]*—/g, '$1')
+    .replace(/[ \t]+([.,;:，。；])/g, '$1')
+    .replace(/([.。])[ \t]*([.。])/g, '$1')
+    .replace(/([.。])[ \t]*[,，、][ \t]*/g, '$1 ')
+    .replace(/([，、；])[ \t]*[，、；]/g, '$1')
+    .replace(/[，、][ \t]*。/g, '。')
+    .replace(/。[ \t]*。/g, '。')
+    .replace(/,[ \t]*,/g, ',')
+    .replace(/[ \t]*\n[ \t]*/g, '\n')
+    .replace(/\n{2,}/g, '\n')
+    .replace(/^[\s，、。；;,\n—]+/, '')
+    .replace(/[\s，、；;,\n—]+$/, '')
+    .trim();
+}
+function render(tpl, vals){
+  return String(tpl || '').replace(/\{\{\s*(\w+)\s*\}\}/g, (m, k) => (vals[k] == null ? '' : vals[k]));
+}
+function pickLang(list, zhArr, lang){
+  const arr = zhArr.map(zh => {
+    const o = list.find(x => x.zh === zh);
+    return lang === 'en' ? (o ? o.en : zh) : zh;
+  }).filter(Boolean);
+  return arr.join(lang === 'en' ? ', ' : '、');
+}
+function valuesFor(app, f, shot){
+  const lang = app.lang === 'en' ? 'en' : 'zh';
+  const camZh = shot ? shot.cam : ((f.cameras && f.cameras[0]) || '缓慢推近');
+  const camObj = CAMERAS.find(c => c.zh === camZh) || CAMERAS[1];
+  const sizeZh = shot ? shot.size : '中景';
+  const subject = (f.subject || '').trim() || (f.brief || '').trim() || '画面主体';
+  return {
+    topic: (f.brief || '').trim(),
+    subject: subject,
+    action: (f.action || '').trim(),
+    scene: (f.scene || '').trim(),
+    mood: (f.mood || '').trim(),
+    style: pickLang(STYLES, f.styles || [], lang) || (lang === 'en' ? 'cinematic' : '电影质感'),
+    light: pickLang(LIGHTS, f.lights || [], lang) || (lang === 'en' ? 'natural light' : '自然光'),
+    camera: lang === 'en' ? camObj.en : camZh,
+    cameraBracket: app.bracket ? camObj.bracket : '',
+    shotSize: lang === 'en' ? (SHOT_EN[sizeZh] || sizeZh) : sizeZh,
+    ratio: f.ratio || '16:9',
+    duration: lang === 'en' ? `${f.duration}s` : `${f.duration} 秒`,
+    negative: (f.negative || '').trim(),
+    audio: (f.audio || '').trim(),
+    music: (f.music || '').trim(),
+    shotIndex: shot ? shot.i : 1,
+    totalShots: f.shots || 1
+  };
+}
+
+/* ---------- 分镜拆解 ---------- */
+function splitBeats(text, n){
+  const raw = String(text || '').split(/[。；;！!？?\n]+/).map(s => s.trim()).filter(Boolean);
+  let parts = [];
+  raw.forEach(seg => {
+    const sub = seg.split(/[，,]/).map(s => s.trim()).filter(Boolean);
+    if(sub.length > 1) parts.push(...sub);
+    else if(seg) parts.push(seg);
+  });
+  parts = parts.filter(s => s.length > 1);
+  const fillers = [
+    '建立环境，交代空间与时间关系',
+    '主体进入画面，动作起始',
+    '动作展开，情绪逐步推进',
+    '细节特写，强调材质与质感',
+    '主体反应，情绪落点',
+    '收尾定格，画面留白'
+  ];
+  while(parts.length < n) parts.push(fillers[parts.length % fillers.length]);
+  if(parts.length > n){
+    const head = parts.slice(0, n - 1);
+    const tail = parts.slice(n - 1).join('，');
+    parts = [...head, tail];
+  }
+  return parts;
+}
+function shotSizes(n){
+  const base = ['远景','全景','中景','近景','特写'];
+  const res = [];
+  if(n <= 1) return ['中景'];
+  for(let i = 0; i < n; i++){
+    res.push(base[Math.round(i * (base.length - 1) / (n - 1))]);
+  }
+  return res;
+}
+function cameraSeq(n, prefs){
+  const pool = (prefs || []).slice();
+  const extra = ['固定机位','缓慢推近','横移','环绕主体','跟拍','拉远','升降','手持晃动'];
+  const seq = [];
+  pool.slice(0, Math.min(2, n)).forEach(c => seq.push(c));
+  let idx = 0, guard = 0;
+  while(seq.length < n && guard < 200){
+    const c = extra[idx % extra.length];
+    if(!seq.includes(c) && c !== seq[seq.length - 1]) seq.push(c);
+    idx++; guard++;
+    if(guard >= extra.length * 3){ // 兜底：允许重复但避免相邻重复
+      const c2 = extra[seq.length % extra.length];
+      if(c2 !== seq[seq.length - 1]) seq.push(c2);
+      guard = 0;
+    }
+  }
+  return seq.slice(0, n);
+}
+function buildShots(app, f){
+  const n = Math.max(1, Math.min(8, f.shots || 1));
+  const beats = splitBeats(f.action, n);
+  const sizes = shotSizes(n);
+  const cams = cameraSeq(n, f.cameras);
+  const tpl = app.shotTemplate || app.template;
+  return beats.map((b, i) => {
+    const shot = {i: i + 1, size: sizes[i], cam: cams[i], desc: b};
+    const vals = valuesFor(app, f, shot);
+    vals.action = b;
+    const text = tidy(render(tpl, vals));
+    return {...shot, prompt: text};
+  });
+}
+
+/* ---------- 生成 ---------- */
+function generate(notify){
+  const app = current();
+  const f = state.form;
+  const vals = valuesFor(app, f, null);
+  const overall = tidy(render(app.template, vals));
+  const shots = buildShots(app, f);
+  state.result = {
+    appId: app.id,
+    appName: app.name,
+    params: {ratio: f.ratio, duration: f.duration, shots: f.shots, style: f.styles, light: f.lights, camera: f.cameras, mood: f.mood},
+    overall,
+    negative: app.negative ? (f.negative || '').trim() : '',
+    audio: app.audio ? (f.audio || '').trim() : '',
+    music: app.music ? (f.music || '').trim() : '',
+    shots
+  };
+  renderOutput();
+  if(notify) toast('已按 ' + app.name + ' 的结构生成');
+}
+
+/* ---------- 输出渲染 ---------- */
+function renderOutput(){
+  const r = state.result;
+  const area = $('#outArea');
+  if(!r){ area.innerHTML = ''; return; }
+  if(state.tab === 'overall') area.innerHTML = overallHTML(r);
+  else if(state.tab === 'shots') area.innerHTML = shotsHTML(r);
+  else area.innerHTML = jsonHTML(r);
+  bindOutput();
+}
+function metaHTML(r){
+  const a = state.apps.find(x => x.id === r.appId) || {};
+  return `<div class="metarow">
+    <span>${esc(r.appName)}</span>
+    <span>${esc(r.params.ratio)}</span>
+    <span>${esc(String(r.params.duration))}s / 条</span>
+    <span>${esc(String(r.params.shots))} 镜</span>
+    ${(r.params.style||[]).map(s => `<span>${esc(s)}</span>`).join('')}
+  </div>`;
+}
+function overallHTML(r){
+  const a = state.apps.find(x => x.id === r.appId) || {};
+  return `
+    <div class="card crop">
+      <div class="card-h">
+        <span class="t">Prompt</span>
+        <span class="tag">${esc(a.formula ? a.formula.join(' · ') : '自定义结构')}</span>
+        <span class="sp"></span>
+        <button class="copy" data-copy="overall">复制</button>
+      </div>
+      <div class="prompt" id="pOverall">${esc(r.overall)}</div>
+      ${metaHTML(r)}
+    </div>
+    ${r.negative ? `
+    <div class="card">
+      <div class="card-h">
+        <span class="t">负向提示词</span><span class="tag">Negative</span><span class="sp"></span>
+        <button class="copy" data-copy="negative">复制</button>
+      </div>
+      <div class="prompt negtxt" id="pNeg">${esc(r.negative)}</div>
+    </div>` : ''}
+    ${r.audio ? `
+    <div class="card">
+      <div class="card-h">
+        <span class="t">Audio</span><span class="tag">音景 / 对白</span><span class="sp"></span>
+        <button class="copy" data-copy="audio">复制</button>
+      </div>
+      <div class="prompt" id="pAudio">${esc(r.audio)}</div>
+      ${r.music ? `<div class="metarow"><span>配乐</span><span>${esc(r.music)}</span></div>` : ''}
+    </div>` : ''}
+    ${(a.tips && a.tips.length) ? `
+    <div class="card">
+      <div class="card-h"><span class="t">${esc(a.name)} 使用要点</span></div>
+      <ul class="tips">${a.tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul>
+    </div>` : ''}
+    <div class="card">
+      <div class="card-h">
+        <span class="t">Reference</span>
+        <span class="tag">光位 · 调色 · 运镜</span>
+      </div>
+      <div class="refs">
+        <div class="ref">
+          <img class="ref-dark" src="assets/shot-lighting.jpg" alt="布光现场">
+          <img class="ref-light" src="assets/beach-light.jpg" alt="海边反光板补光">
+          <i>光位</i>
+        </div>
+        <div class="ref">
+          <img class="ref-dark" src="assets/shot-grading.jpg" alt="调色台">
+          <img class="ref-light" src="assets/beach-grade.jpg" alt="窗边调色">
+          <i>调色</i>
+        </div>
+        <div class="ref">
+          <img class="ref-dark" src="assets/shot-gimbal.jpg" alt="稳定器拍摄">
+          <img class="ref-light" src="assets/beach-gimbal.jpg" alt="海边稳定器跟拍">
+          <i>运镜</i>
+        </div>
+      </div>
+    </div>
+  `;
+}
+function shotsHTML(r){
+  const a = state.apps.find(x => x.id === r.appId) || {};
+  return `
+    <div class="card" style="padding:13px 15px">
+      <div class="card-h" style="margin-bottom:2px">
+        <span class="t">Storyboard</span>
+        <span class="tag">${r.shots.length} 镜 · 单条 ${esc(String(r.params.duration))}s</span>
+        <span class="sp"></span>
+        <button class="copy" data-copy="shots">复制全部</button>
+      </div>
+      <div style="font-size:11px;color:var(--faint);margin-top:4px;line-height:1.7">按「${esc((a.formula||[]).join(' · '))}」逐镜生成，每镜可独立投喂 ${esc(a.name)}。</div>
+    </div>
+    ${r.shots.map(s => `
+      <div class="shot ${s.i === 1 ? 'open' : ''}">
+        <div class="shot-h" data-toggle>
+          <div class="shot-n">${s.i}</div>
+          <div class="info">
+            <b>${esc(s.desc)}</b>
+            <i>${esc(s.size)} · ${esc(s.cam)} · ${esc(String(r.params.duration))}s</i>
+          </div>
+          <button class="copy" data-copy="shot" data-i="${s.i}">复制</button>
+          <span class="arrow">▼</span>
+        </div>
+        <div class="shot-b"><div class="prompt">${esc(s.prompt)}</div></div>
+      </div>`).join('')}
+  `;
+}
+function jsonHTML(r){
+  const data = {
+    platform: r.appName,
+    platformId: r.appId,
+    params: r.params,
+    overallPrompt: r.overall,
+    negativePrompt: r.negative || undefined,
+    audio: r.audio || undefined,
+    storyboard: r.shots.map(s => ({shot: s.i, size: s.size, camera: s.cam, description: s.desc, prompt: s.prompt}))
+  };
+  return `
+    <div class="card">
+      <div class="card-h">
+        <span class="t">结构化数据</span><span class="tag">可直接对接 API</span><span class="sp"></span>
+        <button class="copy" data-copy="json">复制 JSON</button>
+      </div>
+      <div class="prompt" style="font-size:11.8px">${esc(JSON.stringify(data, null, 2))}</div>
+    </div>`;
+}
+function allText(){
+  const r = state.result;
+  if(!r) return '';
+  const a = state.apps.find(x => x.id === r.appId) || {};
+  let out = `# ${r.appName} 提示词\n\n## 整体提示词\n${r.overall}\n`;
+  if(r.negative) out += `\n## 负向提示词\n${r.negative}\n`;
+  if(r.audio) out += `\n## 音频 / 对白\n${r.audio}\n`;
+  if(r.music) out += `\n## 配乐\n${r.music}\n`;
+  out += `\n## 分镜脚本（${r.shots.length} 镜，单条 ${r.params.duration}s）\n`;
+  r.shots.forEach(s => {
+    out += `\n### 镜头 ${s.i} · ${s.size} · ${s.cam}\n${s.prompt}\n`;
+  });
+  if(a.tips && a.tips.length) out += `\n## 使用要点\n${a.tips.map(t => '- ' + t).join('\n')}\n`;
+  return out;
+}
+function bindOutput(){
+  $$('#outArea [data-copy]').forEach(b => {
+    b.onclick = e => {
+      e.stopPropagation();
+      const r = state.result, t = b.dataset.copy;
+      let txt = '';
+      if(t === 'overall') txt = r.overall;
+      else if(t === 'negative') txt = r.negative;
+      else if(t === 'audio') txt = r.audio;
+      else if(t === 'shots') txt = r.shots.map(s => `【镜头 ${s.i}｜${s.size}｜${s.cam}】\n${s.prompt}`).join('\n\n');
+      else if(t === 'shot') txt = (r.shots.find(s => s.i === +b.dataset.i) || {}).prompt || '';
+      else if(t === 'json') txt = JSON.stringify({overall: r.overall, shots: r.shots}, null, 2);
+      copy(txt);
+    };
+  });
+  $$('#outArea .shot-h').forEach(h => {
+    h.onclick = () => h.parentElement.classList.toggle('open');
+  });
+}
+async function copy(text){
+  try{
+    await navigator.clipboard.writeText(text);
+    toast('已复制到剪贴板');
+  }catch(e){
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); toast('已复制到剪贴板'); }catch(_){ toast('复制失败，请手动选择'); }
+    ta.remove();
+  }
+}
+
+/* ---------- 标签页 ---------- */
+function setTab(t){
+  state.tab = t;
+  $('#tabs').querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.tab === t));
+  renderOutput();
+}
+
+/* ---------- 切换应用 ---------- */function switchApp(id){
+  if(!state.apps.some(a => a.id === id)) return;
+  state.currentId = id;
+  const a = current();
+  if(a.durations && !a.durations.includes(state.form.duration)) state.form.duration = a.durations[0];
+  if(a.ratios && !a.ratios.includes(state.form.ratio)) state.form.ratio = a.ratios[0];
+  renderSidebar(); renderTop(); syncForm();
+  saveStore(); generate();
+}
+
+/* ---------- 模板库 ---------- */
+function openDrawer(){
+  renderSaved();
+  $('#drawer').classList.add('on');
+  $('#mask').classList.add('on');
+}
+function closeAll(){
+  $('#drawer').classList.remove('on');
+  $('#appModal').classList.remove('on');
+  $('#mask').classList.remove('on');
+}
+function renderSaved(){
+  const body = $('#drawerBody');
+  if(!state.saved.length){
+    body.innerHTML = `<div style="text-align:center;padding:60px 20px;color:#5A6376">
+      <div style="font-size:30px;opacity:.5;margin-bottom:10px">◇</div>
+      <p style="font-size:12.5px;line-height:1.7">还没有保存的模板。<br>生成后点右上角「存入模板库」，就能沉淀成你自己的套版。</p>
+    </div>`;
+    return;
+  }
+  body.innerHTML = state.saved.map(s => `
+    <div class="saved">
+      <div class="sh">
+        <b>${esc(s.name)}</b>
+        <span class="plat">${esc(s.appName)}</span>
+      </div>
+      <div class="sd">${esc(s.brief || s.overall || '')}</div>
+      <div class="sa">
+        <button data-load="${esc(s.id)}">载入</button>
+        <button data-copyid="${esc(s.id)}">复制提示词</button>
+        <button data-del="${esc(s.id)}" style="color:#FF8FA0">删除</button>
+      </div>
+    </div>`).join('');
+  body.querySelectorAll('[data-load]').forEach(b => b.onclick = () => {
+    const s = state.saved.find(x => x.id === b.dataset.load);
+    if(!s) return;
+    if(state.apps.some(a => a.id === s.appId)) state.currentId = s.appId;
+    state.form = {...state.form, ...s.form, styles:[...(s.form.styles||[])], lights:[...(s.form.lights||[])], cameras:[...(s.form.cameras||[])]};
+    renderSidebar(); renderTop(); syncForm(); generate();
+    closeAll(); toast('已载入「' + s.name + '」');
+  });
+  body.querySelectorAll('[data-copyid]').forEach(b => b.onclick = () => {
+    const s = state.saved.find(x => x.id === b.dataset.copyid);
+    if(s) copy(s.overall || '');
+  });
+  body.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
+    state.saved = state.saved.filter(x => x.id !== b.dataset.del);
+    saveStore(); renderSaved(); toast('已删除');
+  });
+}
+function saveCurrent(){
+  const r = state.result;
+  if(!r) return;
+  const name = prompt('给这套模板起个名字：', `${r.appName} · ${(state.form.brief || '未命名').slice(0, 14)}`);
+  if(name === null) return;
+  state.saved.unshift({
+    id: 's' + Date.now(),
+    name: (name || '').trim() || '未命名模板',
+    appId: r.appId, appName: r.appName,
+    brief: state.form.brief,
+    overall: r.overall,
+    form: JSON.parse(JSON.stringify(state.form)),
+    at: Date.now()
+  });
+  saveStore(); renderSaved(); toast('已存入模板库');
+}
+
+/* ---------- 自定义应用 ---------- */
+let editingId = null;
+function openModal(app){
+  editingId = app ? app.id : null;
+  $('#modalTitle').textContent = app ? '编辑应用' : '添加我的应用';
+  $('#mName').value = app ? app.name : '';
+  $('#mShort').value = app ? app.short : '';
+  $('#mColor').value = app ? app.color : '#8B7BE8';
+  $('#mTag').value = app ? (app.tagline || '') : '';
+  $('#mTpl').value = app ? app.template : '{{subject}}，{{action}}。场景：{{scene}}。镜头：{{shotSize}}，{{camera}}。光影：{{light}}。风格：{{style}}。画幅 {{ratio}}，时长 {{duration}}。';
+  $('#mDur').value = app ? (app.durations || [5]).join(',') : '5,10';
+  $('#mRatio').value = app ? (app.ratios || ['16:9']).join(',') : '16:9,9:16,1:1';
+  $('#mLang').value = app ? (app.lang || 'zh') : 'zh';
+  $('#mNeg').checked = app ? !!app.negative : true;
+  $('#mAudio').checked = app ? !!app.audio : false;
+  $('#mBracket').checked = app ? !!app.bracket : false;
+  $('#mTips').value = app && app.tips ? app.tips.join('\n') : '';
+  $('#appModal').classList.add('on');
+  $('#mask').classList.add('on');
+}
+/* 以内置平台为蓝本新建自定义应用 */
+function cloneToCustom(){
+  const a = current();
+  openModal(null);
+  $('#modalTitle').textContent = '以「' + a.name + '」为模板新建';
+  $('#mName').value = a.name + ' · 我的版本';
+  $('#mShort').value = a.short;
+  $('#mColor').value = a.color;
+  $('#mTag').value = a.tagline || '';
+  $('#mTpl').value = a.template;
+  $('#mDur').value = (a.durations || [5]).join(',');
+  $('#mRatio').value = (a.ratios || ['16:9']).join(',');
+  $('#mLang').value = a.lang || 'zh';
+  $('#mNeg').checked = !!a.negative;
+  $('#mAudio').checked = !!a.audio;
+  $('#mBracket').checked = !!a.bracket;
+  $('#mTips').value = (a.tips || []).join('\n');
+}
+function saveModal(){  const name = $('#mName').value.trim();
+  const tpl = $('#mTpl').value.trim();
+  if(!name){ toast('请填写应用名称'); return; }
+  if(!tpl){ toast('请填写提示词模板'); return; }
+  const durs = $('#mDur').value.split(/[,，\s]+/).map(Number).filter(n => n > 0 && n <= 60);
+  const ratios = $('#mRatio').value.split(/[,，\s]+/).map(s => s.trim()).filter(Boolean);
+  const data = {
+    id: editingId || ('c' + Date.now()),
+    name,
+    short: ($('#mShort').value.trim() || name.slice(0,2)).slice(0,3),
+    color: $('#mColor').value,
+    color2: shade($('#mColor').value, -38),
+    org: '自定义',
+    tagline: $('#mTag').value.trim() || '我的专属提示词结构',
+    caps: [
+      $('#mNeg').checked ? '负向提示词' : null,
+      $('#mAudio').checked ? '音频/对白' : null,
+      $('#mBracket').checked ? '括号运镜' : null
+    ].filter(Boolean).concat([(durs.length ? durs : [5]).join('s / ') + 's']),
+    lang: $('#mLang').value,
+    negative: $('#mNeg').checked,
+    audio: $('#mAudio').checked,
+    bracket: $('#mBracket').checked,
+    durations: durs.length ? durs : [5],
+    ratios: ratios.length ? ratios : ['16:9'],
+    formula: ['主体','动作','场景','镜头','光影','风格'],
+    template: tpl,
+    tips: $('#mTips').value.split('\n').map(s => s.trim()).filter(Boolean),
+    builtin: false
+  };
+  if(editingId){
+    const i = state.apps.findIndex(a => a.id === editingId);
+    if(i >= 0) state.apps[i] = {...state.apps[i], ...data};
+  }else{
+    state.apps.push(data);
+    state.currentId = data.id;
+  }
+  closeAll(); saveStore(); renderSidebar(); renderTop(); syncForm();
+  switchApp(state.currentId);
+  toast(editingId ? '已更新应用' : '已添加「' + name + '」');
+}
+function shade(hex, pct){
+  const n = parseInt(hex.replace('#',''), 16);
+  let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  r = Math.max(0, Math.min(255, Math.round(r + 255 * pct / 100)));
+  g = Math.max(0, Math.min(255, Math.round(g + 255 * pct / 100)));
+  b = Math.max(0, Math.min(255, Math.round(b + 255 * pct / 100)));
+  return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
+}
+
+/* ---------- 导入导出 ---------- */
+function exportData(){
+  const data = {
+    app: 'PromptReel', version: 1, exportedAt: new Date().toISOString(),
+    custom: state.apps.filter(a => !a.builtin),
+    saved: state.saved,
+    form: state.form
+  };
+  download(JSON.stringify(data, null, 2), 'promptreel-backup.json', 'application/json');
+  toast('已导出备份');
+}
+function download(content, filename, mime){
+  const blob = new Blob([content], {type: (mime || 'text/plain') + ';charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+function importData(file){
+  const fr = new FileReader();
+  fr.onload = () => {
+    try{
+      const d = JSON.parse(fr.result);
+      let n = 0;
+      if(Array.isArray(d.custom)){
+        d.custom.forEach(c => {
+          if(!c || !c.id || !c.template) return;
+          if(!state.apps.some(a => a.id === c.id)){ state.apps.push({...c, builtin:false}); n++; }
+        });
+      }
+      if(Array.isArray(d.saved)){
+        d.saved.forEach(s => {
+          if(s && s.id && !state.saved.some(x => x.id === s.id)) state.saved.push(s);
+        });
+      }
+      saveStore(); renderSidebar(); renderSaved();
+      toast(n ? `已导入 ${n} 个自定义应用` : '数据已合并');
+    }catch(e){ toast('文件格式不正确'); }
+  };
+  fr.readAsText(file);
+}
+
+/* ---------- 初始化 ---------- */
+function init(){
+  loadStore();
+  applyTheme(currentTheme());
+  $('#themeSwitch').querySelectorAll('button').forEach(b => {
+    b.onclick = () => applyTheme(b.dataset.theme);
+  });
+  renderSidebar(); renderTop(); syncForm(); bindForm();
+  $('#appSearch').addEventListener('input', renderSidebar);
+  $('#tabs').querySelectorAll('button').forEach(b => b.onclick = () => setTab(b.dataset.tab));
+  $('#copyAllBtn').onclick = () => copy(allText());
+  $('#downloadBtn').onclick = () => {
+    const r = state.result;
+    if(!r) return;
+    const safe = (r.appName || 'prompt').replace(/[\\/:*?"<>|\s]+/g, '-');
+    download(allText(), `${safe}-提示词.md`, 'text/markdown');
+    toast('已下载 Markdown');
+  };
+  $('#saveBtn').onclick = saveCurrent;
+  $('#libBtn').onclick = openDrawer;
+  $('#drawerClose').onclick = closeAll;
+  $('#mask').onclick = closeAll;
+  $('#addAppBtn').onclick = () => openModal(null);
+  $('#editAppBtn').onclick = () => {
+    const a = current();
+    if(a.builtin) return;
+    openModal(a);
+  };
+  $('#modalCancel').onclick = closeAll;
+  $('#modalSave').onclick = saveModal;
+  $('#exportBtn').onclick = exportData;
+  $('#importBtn').onclick = () => $('#importFile').click();
+  $('#importFile').onchange = e => {
+    const f = e.target.files[0];
+    if(f) importData(f);
+    e.target.value = '';
+  };
+  document.addEventListener('keydown', e => {
+    if((e.ctrlKey || e.metaKey) && e.key === 'Enter'){ e.preventDefault(); generate(true); }
+    if(e.key === 'Escape') closeAll();
+  });
+  const hash = (location.hash || '').replace('#','');
+  if(['overall','shots','json'].includes(hash)) setTab(hash);
+  generate();
+}
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,624 @@
+[
+  {
+    "id": "kling",
+    "name": "可灵 AI",
+    "short": "KL",
+    "color": "#8B7BE8",
+    "color2": "#4A3FA0",
+    "org": "快手",
+    "tagline": "3.0 系列原生 4K，五段式描述最稳",
+    "caps": [
+      "负向提示词",
+      "运镜控制",
+      "首尾帧",
+      "原生 4K"
+    ],
+    "lang": "zh",
+    "negative": true,
+    "audio": false,
+    "bracket": false,
+    "durations": [
+      5,
+      10
+    ],
+    "ratios": [
+      "16:9",
+      "9:16",
+      "1:1",
+      "4:3"
+    ],
+    "formula": [
+      "主体",
+      "动作",
+      "场景",
+      "镜头",
+      "光影",
+      "风格"
+    ],
+    "template": "{{subject}}，{{action}}。环境：{{scene}}。镜头：{{shotSize}}，{{camera}}。光影：{{light}}。画面风格：{{style}}。画幅 {{ratio}}，时长 {{duration}}。",
+    "tips": [
+      "主体 + 动作 + 场景 + 镜头 + 光影 五段式最稳，别把多个动作塞进一条",
+      "运动幅度大时降低描述密度，否则画面容易糊",
+      "先用首帧图锁构图，再用文字描述运动，稳定性最高"
+    ]
+  },
+  {
+    "id": "seedance",
+    "name": "即梦 Seedance",
+    "short": "SD",
+    "color": "#4A7BC8",
+    "color2": "#1E3F73",
+    "org": "字节跳动",
+    "tagline": "2.0 结构化分镜，多镜头叙事能力强",
+    "caps": [
+      "负向提示词",
+      "多镜头",
+      "首尾帧",
+      "2.0"
+    ],
+    "lang": "zh",
+    "negative": true,
+    "audio": false,
+    "bracket": false,
+    "durations": [
+      5,
+      10
+    ],
+    "ratios": [
+      "16:9",
+      "9:16",
+      "4:3",
+      "1:1",
+      "21:9"
+    ],
+    "formula": [
+      "画面主体",
+      "动作",
+      "场景",
+      "镜头语言",
+      "风格质感"
+    ],
+    "template": "【画面主体】{{subject}}\n【动作】{{action}}\n【场景】{{scene}}\n【镜头语言】{{shotSize}}，{{camera}}\n【光影与风格】{{light}}，{{style}}\n【参数】画幅 {{ratio}}，时长 {{duration}}",
+    "tips": [
+      "分镜模式下每条只描述一个连续动作，跨镜头交给剪辑",
+      "标签式换行写，比长句更容易被模型完整理解",
+      "风格词放最后，避免污染主体描述"
+    ]
+  },
+  {
+    "id": "hailuo",
+    "name": "海螺 Hailuo",
+    "short": "HL",
+    "color": "#C4694F",
+    "color2": "#7A3A26",
+    "org": "MiniMax",
+    "tagline": "02 系列运动表现强，括号运镜指令",
+    "caps": [
+      "括号运镜",
+      "负向提示词",
+      "6s / 10s"
+    ],
+    "lang": "zh",
+    "negative": true,
+    "audio": false,
+    "bracket": true,
+    "durations": [
+      6,
+      10
+    ],
+    "ratios": [
+      "16:9",
+      "9:16",
+      "1:1"
+    ],
+    "formula": [
+      "运镜指令",
+      "主体",
+      "动作",
+      "场景",
+      "光影",
+      "风格"
+    ],
+    "template": "{{cameraBracket}} {{subject}}，{{action}}。场景：{{scene}}。{{light}}，{{style}}，{{shotSize}}，画幅 {{ratio}}，时长 {{duration}}。",
+    "tips": [
+      "运镜指令写在提示词最前面，用 [ ] 包住，模型识别率最高",
+      "一次只给一个运镜指令，叠加会互相打架",
+      "写清楚运动方向与速度，比写「有电影感」有用得多"
+    ]
+  },
+  {
+    "id": "minimax-h3",
+    "name": "MiniMax H3",
+    "short": "H3",
+    "color": "#6E9B85",
+    "color2": "#33564A",
+    "org": "MiniMax",
+    "tagline": "全模态参考生成，2K / 最长 15 秒",
+    "caps": [
+      "[Shot] 分镜",
+      "音景 + 配乐",
+      "2K",
+      "最长 15s"
+    ],
+    "lang": "en",
+    "negative": false,
+    "audio": true,
+    "music": true,
+    "bracket": false,
+    "durations": [
+      5,
+      10,
+      15
+    ],
+    "ratios": [
+      "16:9",
+      "9:16",
+      "4:3",
+      "1:1",
+      "21:9"
+    ],
+    "formula": [
+      "风格声明",
+      "[Shot N] 描述",
+      "音景",
+      "配乐"
+    ],
+    "template": "This is a live-action, photographic shot, {{style}}.\n[Shot {{shotIndex}}] {{shotSize}}, {{camera}}, {{subject}} {{action}}. {{scene}}, {{light}}.\noverall_soundscape: {{audio}}\nnon_diegetic_music: {{music}}",
+    "tips": [
+      "官方示例全部用英文撰写，主体与动作建议直接用英文填写",
+      "分镜用 [Shot 1] 方括号编号，切点可写时间码 At 00:04.500",
+      "音景与配乐分两行写，H3 会把环境声与非叙事配乐分开处理",
+      "参考素材用 <Picture 1> <Subject 1> 引用，图 ≤9 / 视频 ≤3 / 音频 ≤3"
+    ]
+  },
+  {
+    "id": "muse",
+    "name": "Muse",
+    "short": "MU",
+    "color": "#9A6FB0",
+    "color2": "#5B3A6B",
+    "org": "美学叙事",
+    "tagline": "氛围与色彩情绪优先，适合概念片",
+    "caps": [
+      "情绪基调",
+      "色彩氛围",
+      "长镜头"
+    ],
+    "lang": "zh",
+    "negative": true,
+    "audio": false,
+    "bracket": false,
+    "durations": [
+      5,
+      10
+    ],
+    "ratios": [
+      "16:9",
+      "9:16",
+      "2.39:1"
+    ],
+    "formula": [
+      "主题",
+      "主体",
+      "动作",
+      "场景",
+      "氛围",
+      "镜头",
+      "情绪"
+    ],
+    "template": "{{topic}}\n主体：{{subject}}\n动作：{{action}}\n场景：{{scene}}\n氛围：{{light}}，{{style}}\n镜头：{{shotSize}}，{{camera}}\n情绪基调：{{mood}}\n画幅 {{ratio}}，时长 {{duration}}",
+    "tips": [
+      "先写情绪与色彩关系，再写具体动作，画面更有统一调性",
+      "用「像什么」的比喻描述质感，比堆形容词有效",
+      "情绪基调词会显著影响调色倾向，别和风格词冲突"
+    ]
+  },
+  {
+    "id": "wan",
+    "name": "通义万相 Wan",
+    "short": "WX",
+    "color": "#5C7FA8",
+    "color2": "#2C4A6B",
+    "org": "阿里云",
+    "tagline": "2.2 中文语义与细节还原好",
+    "caps": [
+      "负向提示词",
+      "中文友好",
+      "Wan 2.2"
+    ],
+    "lang": "zh",
+    "negative": true,
+    "audio": false,
+    "bracket": false,
+    "durations": [
+      5
+    ],
+    "ratios": [
+      "16:9",
+      "9:16",
+      "1:1",
+      "4:3"
+    ],
+    "formula": [
+      "主体",
+      "动作",
+      "场景",
+      "光影",
+      "风格",
+      "画质"
+    ],
+    "template": "{{subject}}，{{action}}，{{scene}}，{{light}}，{{style}}，{{shotSize}}，{{camera}}，高清细节，画面稳定，画幅 {{ratio}}，时长 {{duration}}。",
+    "tips": [
+      "画质词（高清细节、画面稳定）放句尾，能明显减少崩坏",
+      "主体数量控制在 2 个以内，多了容易粘连",
+      "中文自然语句即可，不需要翻译成英文"
+    ]
+  },
+  {
+    "id": "hunyuan",
+    "name": "混元视频",
+    "short": "HY",
+    "color": "#4E8FA8",
+    "color2": "#1F4C5C",
+    "org": "腾讯",
+    "tagline": "物理运动真实，适合产品与实拍质感",
+    "caps": [
+      "负向提示词",
+      "物理真实",
+      "5s / 10s"
+    ],
+    "lang": "zh",
+    "negative": true,
+    "audio": false,
+    "bracket": false,
+    "durations": [
+      5,
+      10
+    ],
+    "ratios": [
+      "16:9",
+      "9:16",
+      "1:1"
+    ],
+    "formula": [
+      "主体",
+      "动作",
+      "场景",
+      "镜头",
+      "画质"
+    ],
+    "template": "{{subject}}，{{action}}。{{scene}}，{{shotSize}}，{{camera}}，{{light}}，{{style}}，画面清晰稳定，无变形，画幅 {{ratio}}，时长 {{duration}}。",
+    "tips": [
+      "强调「物理真实、无变形」能减少手指与物体穿模",
+      "产品类镜头写清材质与反光，比写「高级感」有用",
+      "避免快速甩镜，模型对高速运动仍不稳定"
+    ]
+  },
+  {
+    "id": "qingying",
+    "name": "智谱清影",
+    "short": "QY",
+    "color": "#7A8FA6",
+    "color2": "#3D4E5E",
+    "org": "智谱 AI",
+    "tagline": "CogVideoX 底座，4K 60 帧 + AI 音效",
+    "caps": [
+      "负向提示词",
+      "4K 60fps",
+      "AI 音效"
+    ],
+    "lang": "zh",
+    "negative": true,
+    "audio": true,
+    "bracket": false,
+    "durations": [
+      6,
+      10
+    ],
+    "ratios": [
+      "16:9",
+      "9:16",
+      "1:1"
+    ],
+    "formula": [
+      "主体",
+      "动作",
+      "场景",
+      "镜头",
+      "光影",
+      "音效"
+    ],
+    "template": "{{subject}}，{{action}}。场景：{{scene}}。镜头：{{shotSize}}，{{camera}}。光影：{{light}}，{{style}}。音效：{{audio}}。画幅 {{ratio}}，时长 {{duration}}。",
+    "tips": [
+      "默认 6 秒一条，长叙事建议拆成分镜逐条生成",
+      "4K 60 帧适合产品与运动镜头，生成耗时更长",
+      "音效描述单独成句，和画面描述分开写识别更准"
+    ]
+  },
+  {
+    "id": "vidu",
+    "name": "Vidu",
+    "short": "VD",
+    "color": "#C08A4A",
+    "color2": "#6E4A1C",
+    "org": "生数科技",
+    "tagline": "参考图一致性强，动漫与角色向友好",
+    "caps": [
+      "参考生视频",
+      "角色一致",
+      "负向提示词"
+    ],
+    "lang": "zh",
+    "negative": true,
+    "audio": false,
+    "bracket": false,
+    "durations": [
+      4,
+      8
+    ],
+    "ratios": [
+      "16:9",
+      "9:16",
+      "1:1"
+    ],
+    "formula": [
+      "主体",
+      "动作",
+      "场景",
+      "镜头",
+      "质感"
+    ],
+    "template": "{{subject}}，{{action}}。场景：{{scene}}。镜头：{{shotSize}}，{{camera}}。{{light}}，{{style}}，电影质感。画幅 {{ratio}}，时长 {{duration}}。",
+    "tips": [
+      "角色类先上传参考图，提示词只写「变化的部分」",
+      "镜头语言越简单，角色一致性越好",
+      "动漫风格记得同步写画风词，否则会往写实偏"
+    ]
+  },
+  {
+    "id": "pixverse",
+    "name": "PixVerse",
+    "short": "PX",
+    "color": "#4FA396",
+    "color2": "#1F5A52",
+    "org": "爱诗科技",
+    "tagline": "模板化玩法多，特效镜头出片快",
+    "caps": [
+      "特效模板",
+      "负向提示词",
+      "5s / 8s"
+    ],
+    "lang": "zh",
+    "negative": true,
+    "audio": false,
+    "bracket": false,
+    "durations": [
+      5,
+      8
+    ],
+    "ratios": [
+      "16:9",
+      "9:16",
+      "1:1"
+    ],
+    "formula": [
+      "主体",
+      "动作",
+      "场景",
+      "镜头",
+      "特效"
+    ],
+    "template": "{{subject}}，{{action}}。场景：{{scene}}。{{shotSize}}，{{camera}}，{{light}}，{{style}}，视觉冲击力强。画幅 {{ratio}}，时长 {{duration}}。",
+    "tips": [
+      "特效类模板要把「效果发生的那一刻」写清楚",
+      "主体 + 一个明确动作，出片率远高于复杂剧情",
+      "同一提示词换模板多跑几次，比改词更快找到感觉"
+    ]
+  },
+  {
+    "id": "runway",
+    "name": "Runway Gen-4.5",
+    "short": "RW",
+    "color": "#5E9E86",
+    "color2": "#2A5346",
+    "org": "Runway",
+    "tagline": "英文自然语言，电影镜头语言最细",
+    "caps": [
+      "英文提示词",
+      "运镜控制",
+      "5s / 10s"
+    ],
+    "lang": "en",
+    "negative": false,
+    "audio": false,
+    "bracket": false,
+    "durations": [
+      5,
+      10
+    ],
+    "ratios": [
+      "16:9",
+      "9:16",
+      "1:1",
+      "21:9"
+    ],
+    "formula": [
+      "Subject",
+      "Action",
+      "Scene",
+      "Shot",
+      "Light",
+      "Style"
+    ],
+    "template": "{{subject}} — {{action}} — {{scene}}. {{shotSize}}, {{camera}}, {{light}}, {{style}}. Shot on 35mm, natural motion, {{ratio}}.",
+    "tips": [
+      "海外模型对英文更敏感，主体与动作建议直接用英文填写",
+      "一句话一个镜头，不要写多段剧情",
+      "Camera 与 lens 术语（dolly、crane、35mm）识别度高"
+    ]
+  },
+  {
+    "id": "luma",
+    "name": "Luma Dream Machine",
+    "short": "LU",
+    "color": "#B8657F",
+    "color2": "#66303F",
+    "org": "Luma",
+    "tagline": "自然流畅运动，一句话出片",
+    "caps": [
+      "英文提示词",
+      "首尾帧",
+      "5s / 9s"
+    ],
+    "lang": "en",
+    "negative": false,
+    "audio": false,
+    "bracket": false,
+    "durations": [
+      5,
+      9
+    ],
+    "ratios": [
+      "16:9",
+      "9:16",
+      "1:1",
+      "21:9"
+    ],
+    "formula": [
+      "Subject",
+      "Action",
+      "Scene",
+      "Camera",
+      "Style"
+    ],
+    "template": "{{subject}} — {{action}}, {{scene}}. {{shotSize}}, {{camera}}, {{light}}, {{style}}, cinematic, smooth motion, {{ratio}}.",
+    "tips": [
+      "短句 + 具体动词效果最好，长句会被截断理解",
+      "加 smooth motion / fluid movement 能减少抖动",
+      "人物特写建议写清面部表情与视线方向"
+    ]
+  },
+  {
+    "id": "pika",
+    "name": "Pika",
+    "short": "PK",
+    "color": "#B06B9E",
+    "color2": "#5E3452",
+    "org": "Pika Labs",
+    "tagline": "轻量创意向，特效与变形玩法多",
+    "caps": [
+      "英文提示词",
+      "负向提示词",
+      "特效"
+    ],
+    "lang": "en",
+    "negative": true,
+    "audio": false,
+    "bracket": false,
+    "durations": [
+      5,
+      10
+    ],
+    "ratios": [
+      "16:9",
+      "9:16",
+      "1:1"
+    ],
+    "formula": [
+      "Subject",
+      "Action",
+      "Scene",
+      "Camera",
+      "Style"
+    ],
+    "template": "{{subject}} — {{action}} — {{scene}}, {{shotSize}}, {{camera}}, {{light}}, {{style}}, {{ratio}}.",
+    "tips": [
+      "用破折号分隔「画面」和「风格」，可读性更好",
+      "特效词（morph、explode、freeze）放动作后面",
+      "负向提示词里加上 blurry、distorted 能提升成片率"
+    ]
+  },
+  {
+    "id": "sora",
+    "name": "Sora 2",
+    "short": "SR",
+    "color": "#8A8A8F",
+    "color2": "#3E3E44",
+    "org": "OpenAI",
+    "tagline": "长镜头 + 原生音频，适合叙事短片",
+    "caps": [
+      "英文提示词",
+      "原生音频",
+      "对白"
+    ],
+    "lang": "en",
+    "negative": false,
+    "audio": true,
+    "bracket": false,
+    "durations": [
+      4,
+      8,
+      12
+    ],
+    "ratios": [
+      "16:9",
+      "9:16",
+      "1:1"
+    ],
+    "formula": [
+      "Subject",
+      "Action",
+      "Scene",
+      "Camera",
+      "Light",
+      "Style",
+      "Audio"
+    ],
+    "template": "{{subject}} — {{action}} — {{scene}}. {{shotSize}}, {{camera}}, {{light}}, {{style}}. Audio: {{audio}}. {{duration}}, {{ratio}}.",
+    "tips": [
+      "Sora 会自己补剧情，提示词写「起点和终点」比写过程更准",
+      "需要声音时务必显式写 Audio，否则可能静音",
+      "一条提示词只保留一个时间连续的场景"
+    ]
+  },
+  {
+    "id": "veo",
+    "name": "Veo 3.1",
+    "short": "V3",
+    "color": "#5C7FC0",
+    "color2": "#28406B",
+    "org": "Google",
+    "tagline": "音画同步生成，物理与材质表现优秀",
+    "caps": [
+      "英文提示词",
+      "原生音频",
+      "8s"
+    ],
+    "lang": "en",
+    "negative": false,
+    "audio": true,
+    "bracket": false,
+    "durations": [
+      8
+    ],
+    "ratios": [
+      "16:9",
+      "9:16"
+    ],
+    "formula": [
+      "Subject",
+      "Action",
+      "Scene",
+      "Shot",
+      "Light",
+      "Style",
+      "Audio"
+    ],
+    "template": "{{subject}} — {{action}}, {{scene}}. {{shotSize}}, {{camera}}, {{light}}, {{style}}. Audio: {{audio}}. {{ratio}}, {{duration}}.",
+    "tips": [
+      "音效写具体（footsteps on wet concrete）比写 ambient sound 好",
+      "有对白时用引号包住台词，并注明说话人",
+      "避免在同一镜头内切场景，Veo 会强行衔接导致变形"
+    ]
+  }
+]

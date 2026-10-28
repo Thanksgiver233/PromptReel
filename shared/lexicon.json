@@ -1,0 +1,150 @@
+{
+  "STYLES": [
+    {
+      "zh": "电影级写实",
+      "en": "cinematic realism"
+    },
+    {
+      "zh": "3D 动画",
+      "en": "3D animation, stylized render"
+    },
+    {
+      "zh": "日系动漫",
+      "en": "anime style, cel shading"
+    },
+    {
+      "zh": "赛博朋克",
+      "en": "cyberpunk, neon lit"
+    },
+    {
+      "zh": "水墨国风",
+      "en": "Chinese ink wash painting"
+    },
+    {
+      "zh": "胶片质感",
+      "en": "35mm film, grain"
+    },
+    {
+      "zh": "广告大片",
+      "en": "high-end commercial look"
+    },
+    {
+      "zh": "定格动画",
+      "en": "stop motion"
+    },
+    {
+      "zh": "超现实",
+      "en": "surreal dreamlike"
+    },
+    {
+      "zh": "复古 80s",
+      "en": "retro 1980s VHS"
+    },
+    {
+      "zh": "蒸汽波",
+      "en": "vaporwave aesthetic"
+    },
+    {
+      "zh": "黑白默片",
+      "en": "black and white silent film"
+    }
+  ],
+  "LIGHTS": [
+    {
+      "zh": "体积光",
+      "en": "volumetric light rays"
+    },
+    {
+      "zh": "柔光",
+      "en": "soft diffused light"
+    },
+    {
+      "zh": "霓虹侧光",
+      "en": "neon rim light"
+    },
+    {
+      "zh": "黄金时刻",
+      "en": "golden hour glow"
+    },
+    {
+      "zh": "低调暗光",
+      "en": "low-key lighting"
+    },
+    {
+      "zh": "硬光高反差",
+      "en": "hard light, high contrast"
+    },
+    {
+      "zh": "自然日光",
+      "en": "natural daylight"
+    },
+    {
+      "zh": "雨夜反光",
+      "en": "rainy night reflections"
+    },
+    {
+      "zh": "霓虹赛博光",
+      "en": "cyan and magenta neon"
+    },
+    {
+      "zh": "烛火暖光",
+      "en": "warm candlelight"
+    }
+  ],
+  "CAMERAS": [
+    {
+      "zh": "固定机位",
+      "en": "static shot",
+      "bracket": "[Static shot]"
+    },
+    {
+      "zh": "缓慢推近",
+      "en": "slow push in",
+      "bracket": "[Push in]"
+    },
+    {
+      "zh": "拉远",
+      "en": "pull out",
+      "bracket": "[Pull out]"
+    },
+    {
+      "zh": "横移",
+      "en": "lateral truck",
+      "bracket": "[Truck right]"
+    },
+    {
+      "zh": "环绕主体",
+      "en": "arc shot around subject",
+      "bracket": "[Arc shot]"
+    },
+    {
+      "zh": "跟拍",
+      "en": "tracking shot",
+      "bracket": "[Tracking shot]"
+    },
+    {
+      "zh": "手持晃动",
+      "en": "handheld camera",
+      "bracket": "[Handheld]"
+    },
+    {
+      "zh": "升降",
+      "en": "crane up",
+      "bracket": "[Pedestal up]"
+    },
+    {
+      "zh": "快速变焦",
+      "en": "crash zoom",
+      "bracket": "[Zoom in]"
+    }
+  ],
+  "SHOT_EN": {
+    "远景": "wide shot",
+    "全景": "full shot",
+    "中景": "medium shot",
+    "中近景": "medium close-up",
+    "近景": "close shot",
+    "特写": "close-up",
+    "大特写": "extreme close-up"
+  }
+}
